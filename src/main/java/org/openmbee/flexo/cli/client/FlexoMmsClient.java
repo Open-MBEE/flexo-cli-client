@@ -90,23 +90,43 @@ public class FlexoMmsClient implements AutoCloseable {
 
     /**
      * Create a new branch
+     *
+     * Creates a branch by referencing the source branch using a relative URL.
+     * Based on integration test approach in flexo-mms-layer1-service.
      */
-    public Branch createBranch(String orgId, String repoId, String branchId, String fromCommit) throws IOException {
-        String url = String.format("%s/orgs/%s/repos/%s/branches/%s", baseUrl, orgId, repoId, branchId);
-        logger.debug("PUT {}", url);
+    public Branch createBranch(String orgId, String repoId, String branchId, String fromBranch) throws IOException {
+        // If no source branch specified, use master
+        if (fromBranch == null || fromBranch.isEmpty()) {
+            fromBranch = "master";
+        }
 
-        HttpPut request = new HttpPut(url);
+        String branchUrl = String.format("%s/orgs/%s/repos/%s/branches/%s", baseUrl, orgId, repoId, branchId);
+        logger.debug("Creating branch at: {}", branchUrl);
+
+        // Use relative URL for mms:ref (key insight from integration tests!)
+        // The tests use <../branches/master> which is a relative reference
+        String relativeRefUrl = "../branches/" + fromBranch;
+
+        // Build RDF body with relative mms:ref
+        StringBuilder rdfBody = new StringBuilder();
+        rdfBody.append("@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n");
+        rdfBody.append("@prefix dct: <http://purl.org/dc/terms/> .\n\n");
+        rdfBody.append("<> dct:title \"").append(branchId).append("\"@en .\n");
+        rdfBody.append("<> mms:ref <").append(relativeRefUrl).append("> .\n");
+
+        HttpPut request = new HttpPut(branchUrl);
         addAuthHeader(request);
-
-        // TODO: Add branch creation body if needed based on API
         request.setHeader("Content-Type", "text/turtle");
-        request.setEntity(new StringEntity("", ContentType.parse("text/turtle")));
+        request.setEntity(new StringEntity(rdfBody.toString(), ContentType.parse("text/turtle")));
+
+        logger.debug("Branch creation RDF:\n{}", rdfBody.toString());
 
         try (CloseableHttpResponse response = httpClient.execute(request)) {
             int statusCode = response.getCode();
             String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
 
             if (statusCode >= 200 && statusCode < 300) {
+                logger.debug("Branch created successfully");
                 return getBranch(orgId, repoId, branchId);
             } else {
                 throw new IOException("Failed to create branch: HTTP " + statusCode + " - " + responseBody);
@@ -242,11 +262,54 @@ public class FlexoMmsClient implements AutoCloseable {
         List<Branch> branches = new ArrayList<>();
         try {
             Model model = RdfParser.parseString(rdfContent, "turtle");
-            // TODO: Parse RDF model to extract branch information
-            // For now, return empty list
             logger.debug("Parsed RDF model with {} statements", model.size());
+
+            // Query for branch resources
+            String mmsNs = "https://mms.openmbee.org/rdf/ontology/";
+            org.apache.jena.rdf.model.Property rdfType = model.getProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+            org.apache.jena.rdf.model.Resource branchType = model.getResource(mmsNs + "Branch");
+            org.apache.jena.rdf.model.Property mmsId = model.getProperty(mmsNs + "id");
+            org.apache.jena.rdf.model.Property mmsCommit = model.getProperty(mmsNs + "commit");
+            org.apache.jena.rdf.model.Property mmsEtag = model.getProperty(mmsNs + "etag");
+
+            // Find all branch subjects
+            org.apache.jena.rdf.model.ResIterator iter = model.listSubjectsWithProperty(rdfType, branchType);
+            while (iter.hasNext()) {
+                org.apache.jena.rdf.model.Resource branchRes = iter.nextResource();
+                Branch branch = new Branch();
+
+                // Set ID from URI or mms:id property
+                if (branchRes.hasProperty(mmsId)) {
+                    branch.setId(branchRes.getProperty(mmsId).getString());
+                } else {
+                    // Extract ID from URI (last path segment)
+                    String uri = branchRes.getURI();
+                    if (uri != null && uri.contains("/branches/")) {
+                        String id = uri.substring(uri.lastIndexOf("/") + 1);
+                        branch.setId(id);
+                    }
+                }
+
+                // Set commit ID
+                if (branchRes.hasProperty(mmsCommit)) {
+                    String commitUri = branchRes.getProperty(mmsCommit).getResource().getURI();
+                    branch.setCommitId(commitUri);
+                }
+
+                // Set etag
+                if (branchRes.hasProperty(mmsEtag)) {
+                    branch.setEtag(branchRes.getProperty(mmsEtag).getString());
+                }
+
+                // Set name same as ID for now
+                branch.setName(branch.getId());
+
+                branches.add(branch);
+            }
+
+            logger.debug("Parsed {} branches from RDF", branches.size());
         } catch (Exception e) {
-            logger.error("Failed to parse branches from RDF: {}", e.getMessage());
+            logger.error("Failed to parse branches from RDF: {}", e.getMessage(), e);
         }
         return branches;
     }

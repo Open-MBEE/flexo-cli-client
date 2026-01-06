@@ -62,11 +62,13 @@ public class InitCommand implements Runnable {
             // Step 1: Create organization
             createOrg(client, orgId);
 
-            // Step 2: Create repository (which automatically creates the master branch)
+            // Step 2: Create repository
             createRepo(client, orgId, repoId);
 
+            // Step 3: Create initial branch with empty commit
+            createInitialBranch(client, orgId, repoId, branchId);
+
             ConsoleUtil.success("Initialization complete!");
-            ConsoleUtil.info("Note: The default 'master' branch was created automatically with the repository");
 
             // Update configuration file with defaults
             updateConfigDefaults(config, orgId, repoId);
@@ -143,6 +145,63 @@ public class InitCommand implements Runnable {
             } else {
                 throw e;
             }
+        }
+    }
+
+    private void createInitialBranch(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+        ConsoleUtil.info("Creating initial branch '" + branchId + "'...");
+
+        // First, create an empty model commit on the branch
+        String branchUrl = client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId + "/branches/" + branchId;
+        String graphUrl = branchUrl + "/graph";
+
+        // Create empty RDF model
+        String emptyModel = "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n";
+
+        // PUT empty model to create initial commit
+        HttpPut graphRequest = new HttpPut(graphUrl);
+        graphRequest.setHeader("Content-Type", "text/turtle");
+        graphRequest.setHeader("X-Commit-Message", "Initial commit");
+        graphRequest.setEntity(new StringEntity(emptyModel, ContentType.parse("text/turtle")));
+
+        try {
+            String response = client.executeRequest(graphRequest);
+            ConsoleUtil.success("  Branch '" + branchId + "' created with initial commit");
+            if (parent.isVerbose()) {
+                ConsoleUtil.debug("Response: " + response);
+            }
+        } catch (Exception e) {
+            if (e.getMessage().contains("404") || e.getMessage().contains("Not Found")) {
+                // Branch doesn't exist yet, need to create it first with a commit reference
+                ConsoleUtil.warn("  Branch needs to be created first, trying alternative approach...");
+                createBranchWithCommit(client, orgId, repoId, branchId);
+            } else if (e.getMessage().contains("409") || e.getMessage().contains("Conflict")) {
+                ConsoleUtil.warn("  Branch already exists");
+                if (!force) {
+                    throw new Exception("Branch '" + branchId + "' already exists. Use --force to override.");
+                }
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    private void createBranchWithCommit(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+        // Create a self-referencing commit first by PUTting an empty graph
+        // This creates both the branch and an initial commit atomically
+        String graphUrl = client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId + "/branches/" + branchId + "/graph";
+
+        String emptyModel = "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n";
+
+        HttpPut request = new HttpPut(graphUrl);
+        request.setHeader("Content-Type", "text/turtle");
+        request.setHeader("X-Commit-Message", "Initial commit");
+        request.setEntity(new StringEntity(emptyModel, ContentType.parse("text/turtle")));
+
+        String response = client.executeRequest(request);
+        ConsoleUtil.success("  Branch '" + branchId + "' created with initial commit");
+        if (parent.isVerbose()) {
+            ConsoleUtil.debug("Response: " + response);
         }
     }
 
