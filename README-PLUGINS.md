@@ -274,7 +274,7 @@ flexo my sub1 --param test
 For a complete example, see the SysML v2 plugin project structure:
 
 ```
-flexo-sysmlv2-plugin/
+flexo-cli-sysmlv2-plugin/
 ├── build.gradle
 ├── src/main/
 │   ├── java/org/openmbee/flexo/sysmlv2/plugin/
