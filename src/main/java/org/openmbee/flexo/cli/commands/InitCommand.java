@@ -67,13 +67,19 @@ public class InitCommand implements Runnable {
 
             ConsoleUtil.success("Initialization complete!");
             ConsoleUtil.info("Note: The default 'master' branch was created automatically with the repository");
+
+            // Update configuration file with defaults
+            updateConfigDefaults(config, orgId, repoId);
+
             ConsoleUtil.info("");
-            ConsoleUtil.info("You can now use the CLI with these defaults:");
-            ConsoleUtil.info("  flexo --org " + orgId + " --repo " + repoId + " branch --list");
-            ConsoleUtil.info("");
-            ConsoleUtil.info("Or configure as defaults in ~/.flexo/config:");
+            ConsoleUtil.info("Configuration updated in ~/.flexo/config with:");
             ConsoleUtil.info("  default.org=" + orgId);
             ConsoleUtil.info("  default.repo=" + repoId);
+            ConsoleUtil.info("");
+            ConsoleUtil.info("You can now use the CLI without specifying org/repo:");
+            ConsoleUtil.info("  flexo branch --list");
+            ConsoleUtil.info("  flexo pull master");
+            ConsoleUtil.info("  flexo push master --message \"My changes\" --input model.ttl");
 
         } catch (Exception e) {
             ConsoleUtil.error("Initialization failed: " + e.getMessage());
@@ -243,5 +249,32 @@ public class InitCommand implements Runnable {
         }
 
         ConsoleUtil.success("  Cluster configuration loaded into Fuseki");
+    }
+
+    private void updateConfigDefaults(FlexoConfig config, String orgId, String repoId) throws Exception {
+        ConsoleUtil.info("Updating configuration file...");
+
+        // Set the default org and repo in the config
+        config.set("default.org", orgId);
+        config.set("default.repo", repoId);
+
+        // Ensure local mode settings are set if not already present
+        if (config.get("local.mode") == null) {
+            config.set("local.mode", "true");
+        }
+        if (config.get("local.user") == null) {
+            config.set("local.user", "root");
+        }
+        if (config.get("local.jwtSecret") == null) {
+            config.set("local.jwtSecret", "devsecretpleasechangeinproduction1234567890");
+        }
+        if (config.get("default.branch") == null) {
+            config.set("default.branch", "master");
+        }
+
+        // Save the config
+        config.save();
+
+        ConsoleUtil.success("  Configuration saved");
     }
 }

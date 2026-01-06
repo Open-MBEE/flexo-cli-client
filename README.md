@@ -4,9 +4,11 @@ A git-style command-line interface for interacting with Flexo MMS Layer 1 Servic
 
 ## Features
 
-- **Git-style commands**: `push`, `pull`, `branch`, `merge`, `rm`
+- **Automated initialization**: One-command setup of local MMS instances
+- **Git-style commands**: `init`, `push`, `pull`, `branch`, `merge`, `rm`
 - **RDF support**: Works with Turtle, JSON-LD, RDF/XML, N-Triples formats
-- **SSH key authentication**: Supports SSH key-based JWT authentication (optional)
+- **Local mode authentication**: Automatic authentication for local development
+- **SSH key authentication**: Supports SSH key-based JWT authentication for production
 - **Configuration management**: Simple configuration via `~/.flexo/config`
 - **Local development**: Easy setup with docker-compose
 
@@ -110,22 +112,23 @@ This starts:
 - **Fuseki** (quad-store) on port 3030
 - **Flexo MMS Layer 1 Service** on port 8080
 
-### 2. Initialize the cluster
+### 2. Initialize the MMS
 
-Generate and load the initialization data:
+Use the `init` command to set up everything automatically:
 
 ```bash
-# Generate cluster configuration
-cd flexo-mms-layer1-service/deploy
-npx ts-node src/main.ts http://layer1-service > ../src/test/resources/cluster.trig
-
-# Load into Fuseki
-curl -X POST http://localhost:3030/ds/data?default \
-  -H "Content-Type: application/trig" \
-  --data-binary @../src/test/resources/cluster.trig
+cd flexo-cli-client
+./gradlew installDist
+./build/install/flexo/bin/flexo init
 ```
 
-### 3. Configure the CLI
+This single command will:
+- Generate cluster configuration (users, policies)
+- Load it into Fuseki
+- Create the default org and repo
+- Set up the master branch
+
+### 3. Configure the CLI (Optional)
 
 ```bash
 mkdir -p ~/.flexo
@@ -133,9 +136,9 @@ cat > ~/.flexo/config << EOF
 mms.url=http://localhost:8080
 local.mode=true
 local.user=root
-local.jwtSecret=dev-secret-please-change-in-production
-default.org=example
-default.repo=example-repo
+local.jwtSecret=devsecretpleasechangeinproduction1234567890
+default.org=localorg
+default.repo=localrepo
 default.branch=master
 rdf.format=turtle
 EOF
@@ -145,29 +148,44 @@ EOF
 
 ### Init Command
 
-Initialize a local Flexo MMS instance with a default organization and repository. This is useful for quickly setting up a development environment.
+Initialize a local Flexo MMS instance with a default organization and repository. This command automates the complete setup process for local development.
+
+**What it does:**
+1. Generates cluster configuration with default users (`root`, `admin`, `anon`)
+2. Loads access control policies into Fuseki triplestore
+3. Creates default organization: `localorg`
+4. Creates default repository: `localrepo`
+5. Automatically creates the `master` branch
 
 ```bash
-# Initialize with defaults (org: localorg, repo: localrepo, branch: master)
+# Initialize with defaults (org: localorg, repo: localrepo)
 flexo init
 
 # Initialize with custom org/repo
 flexo --org myorg --repo myrepo init
 
-# Initialize with custom branch name
-flexo init --branch main
-
 # Force re-initialization if resources already exist
 flexo init --force
 ```
 
-After initialization, you can use the CLI immediately:
+After initialization, you can immediately use the CLI:
 
 ```bash
+# List branches
 flexo --org localorg --repo localrepo branch --list
+
+# Set defaults in config for convenience
+echo "default.org=localorg" >> ~/.flexo/config
+echo "default.repo=localrepo" >> ~/.flexo/config
+
+# Now you can omit --org and --repo
+flexo branch --list
 ```
 
-**Note:** There is a known issue with the MMS layer1 service (ConcurrentModificationException) that may cause initialization to fail. If this happens, the resources may have been partially created. You can use `--force` to retry, or create them manually using curl and the MMS API.
+**Prerequisites:**
+- Docker services must be running (see Local Development Setup)
+- The `flexo-mms-layer1-service/deploy` directory must be accessible (for generating cluster.trig)
+- Node.js and `ts-node` must be available for cluster generation
 
 ### Global Options
 
@@ -318,16 +336,26 @@ flexo merge feature --target master --no-commit
 # (manual merge workflow)
 ```
 
-### Example 4: Using with different organizations
+### Example 4: Complete workflow from scratch
 
 ```bash
-# Set defaults in config
-echo "default.org=myorg" >> ~/.flexo/config
-echo "default.repo=myrepo" >> ~/.flexo/config
+# 1. Start Docker services
+docker-compose -f docker-compose.local.yml up -d
 
-# Now you can omit --org and --repo
+# 2. Initialize MMS
+cd flexo-cli-client
+./gradlew installDist
+./build/install/flexo/bin/flexo init
+
+# 3. Configure defaults
+echo "default.org=localorg" >> ~/.flexo/config
+echo "default.repo=localrepo" >> ~/.flexo/config
+
+# 4. Use the CLI
 flexo branch --list
-flexo pull master
+flexo pull master --output model.ttl
+# Edit model.ttl...
+flexo push master --message "My changes" --input model.ttl
 ```
 
 ## RDF Formats
@@ -404,10 +432,19 @@ docker logs quad-store-server
 
 ### Authentication errors
 
+For local development, ensure local mode is enabled:
+
 ```bash
-# Disable authentication for local development
-echo "auth.enabled=false" >> ~/.flexo/config
+# Enable local mode (should be default)
+echo "local.mode=true" >> ~/.flexo/config
+echo "local.user=root" >> ~/.flexo/config
+echo "local.jwtSecret=devsecretpleasechangeinproduction1234567890" >> ~/.flexo/config
 ```
+
+If you get 401/403 errors, ensure:
+1. The cluster configuration has been loaded into Fuseki (`flexo init` does this)
+2. The JWT secret matches your docker-compose.local.yml configuration
+3. Local mode is enabled in your config
 
 ### RDF parsing errors
 
@@ -427,6 +464,19 @@ flexo branch --list
 
 # Make sure org and repo are correct
 flexo --org yourorg --repo yourrepo branch --list
+
+# If no branches exist, you may need to re-initialize
+flexo init
+```
+
+### Empty triplestore
+
+If you get errors about missing users or policies:
+
+```bash
+# Clear and re-initialize
+curl -X POST http://localhost:3030/ds/update --data "DELETE WHERE { GRAPH ?g { ?s ?p ?o } }"
+flexo init
 ```
 
 ## Development
