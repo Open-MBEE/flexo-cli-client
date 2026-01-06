@@ -1,0 +1,76 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'org.openmbee.flexo'
+version = '0.1.0'
+
+sourceCompatibility = '17'
+targetCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // CLI framework
+    implementation 'info.picocli:picocli:4.7.5'
+    annotationProcessor 'info.picocli:picocli-codegen:4.7.5'
+
+    // HTTP client
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3'
+
+    // RDF/Turtle parsing (matching flexo-mms-layer1-service)
+    implementation 'org.apache.jena:jena-arq:4.10.0'
+
+    // JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
+
+    // SSH key operations and JWT
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.5.18'
+
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+}
+
+application {
+    mainClass = 'org.openmbee.flexo.cli.FlexoCLI'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// Create a distribution with all dependencies
+distributions {
+    main {
+        distributionBaseName = 'flexo'
+    }
+}
+
+// Create start scripts
+startScripts {
+    applicationName = 'flexo'
+}
+
+// Task to generate a fat JAR
+tasks.register('fatJar', Jar) {
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes 'Main-Class': 'org.openmbee.flexo.cli.FlexoCLI'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    with jar
+}

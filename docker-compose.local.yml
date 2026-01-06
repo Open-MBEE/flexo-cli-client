@@ -1,0 +1,71 @@
+version: '3.8'
+
+# Simplified docker-compose for local Flexo MMS development
+# This setup runs flexo-mms-layer1-service without authentication
+# for easy testing with the flexo-cli-client
+
+services:
+
+  quad-store-server:
+    image: atomgraph/fuseki:4.7
+    hostname: quad-store-server
+    container_name: quad-store-server
+    command: --mem --update /ds
+    ports:
+      - "3030:3030"
+    networks:
+      - flexo-local
+
+  layer1-service:
+    build:
+      context: ../flexo-mms-layer1-service
+      dockerfile: Dockerfile
+    hostname: layer1-service
+    container_name: layer1-service
+    environment:
+      # MMS Configuration
+      - FLEXO_MMS_ROOT_CONTEXT=http://layer1-service
+      - FLEXO_MMS_QUERY_URL=http://quad-store-server:3030/ds/sparql
+      - FLEXO_MMS_UPDATE_URL=http://quad-store-server:3030/ds/update
+      - FLEXO_MMS_GRAPH_STORE_PROTOCOL_URL=http://quad-store-server:3030/ds/data
+
+      # Simplified JWT configuration (no real authentication)
+      - JWT_DOMAIN=http://localhost:8080/
+      - JWT_AUDIENCE=flexo-mms
+      - JWT_REALM=Flexo MMS Local
+      - JWT_SECRET=devsecretpleasechangeinproduction1234567890
+
+      # Disable glomar response for easier debugging
+      - FLEXO_MMS_GLOMAR_RESPONSE=false
+    depends_on:
+      - quad-store-server
+    ports:
+      - "8080:8080"
+    networks:
+      - flexo-local
+    # Wait for quad-store to be ready
+    restart: on-failure
+
+networks:
+  flexo-local:
+    name: flexo-local-network
+    driver: bridge
+
+# Usage:
+# 1. Start services: docker-compose -f docker-compose.local.yml up -d
+# 2. Initialize cluster:
+#    cd flexo-mms-layer1-service/deploy
+#    npx ts-node src/main.ts http://layer1-service > ../src/test/resources/cluster.trig
+# 3. Load initialization data into Fuseki:
+#    curl -X POST http://localhost:3030/ds/data?default \
+#      -H "Content-Type: application/trig" \
+#      --data-binary @flexo-mms-layer1-service/src/test/resources/cluster.trig
+# 4. Use flexo CLI:
+#    cd flexo-cli-client
+#    ./gradlew installDist
+#    ./build/install/flexo/bin/flexo --help
+#
+# NOTE: This setup uses a hardcoded 'root' user with full admin privileges.
+# The flexo-cli-client is configured to use local.mode=true by default, which
+# automatically authenticates as the 'root' user defined in cluster.trig.
+# This is for local development only - NEVER use this configuration in production!

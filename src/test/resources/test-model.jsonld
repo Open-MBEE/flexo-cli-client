@@ -1,0 +1,19 @@
+{
+  "@context": {
+    "ex": "http://example.org/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  },
+  "@graph": [
+    {
+      "@id": "ex:subject1",
+      "@type": "ex:Class1",
+      "ex:property1": "value1",
+      "ex:property2": "value2"
+    },
+    {
+      "@id": "ex:subject2",
+      "@type": "ex:Class2",
+      "ex:property3": "value3"
+    }
+  ]
+}

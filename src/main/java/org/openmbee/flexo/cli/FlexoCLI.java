@@ -1,0 +1,98 @@
+package org.openmbee.flexo.cli;
+
+import org.openmbee.flexo.cli.commands.*;
+import org.openmbee.flexo.cli.config.FlexoConfig;
+import org.openmbee.flexo.cli.util.ConsoleUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+/**
+ * Main entry point for Flexo CLI
+ * Provides git-style commands for interacting with Flexo MMS
+ */
+@Command(
+        name = "flexo",
+        description = "Flexo MMS command-line interface",
+        mixinStandardHelpOptions = true,
+        version = "0.1.0",
+        subcommands = {
+                InitCommand.class,
+                BranchCommand.class,
+                PullCommand.class,
+                PushCommand.class,
+                RmCommand.class,
+                MergeCommand.class,
+                CommandLine.HelpCommand.class
+        }
+)
+public class FlexoCLI implements Runnable {
+    private static final Logger logger = LoggerFactory.getLogger(FlexoCLI.class);
+
+    @Option(names = {"-c", "--config"}, description = "Configuration file path", scope = CommandLine.ScopeType.INHERIT)
+    private String configFile;
+
+    @Option(names = {"-v", "--verbose"}, description = "Verbose output", scope = CommandLine.ScopeType.INHERIT)
+    private boolean verbose;
+
+    @Option(names = {"--org"}, description = "Organization ID", scope = CommandLine.ScopeType.INHERIT)
+    private String orgId;
+
+    @Option(names = {"--repo"}, description = "Repository ID", scope = CommandLine.ScopeType.INHERIT)
+    private String repoId;
+
+    @Option(names = {"--no-color"}, description = "Disable colored output", scope = CommandLine.ScopeType.INHERIT)
+    private boolean noColor;
+
+    private static FlexoConfig config;
+
+    public static void main(String[] args) {
+        // Initialize configuration
+        config = new FlexoConfig();
+
+        // Create and execute command
+        int exitCode = new CommandLine(new FlexoCLI())
+                .setCaseInsensitiveEnumValuesAllowed(true)
+                .execute(args);
+
+        System.exit(exitCode);
+    }
+
+    @Override
+    public void run() {
+        // When no subcommand is specified, print help
+        ConsoleUtil.info("Flexo MMS CLI - Use --help for available commands");
+        ConsoleUtil.info("");
+        ConsoleUtil.info("Available commands:");
+        ConsoleUtil.info("  init    - Initialize local MMS with default org and repo");
+        ConsoleUtil.info("  branch  - List, create, or manage branches");
+        ConsoleUtil.info("  pull    - Fetch model from a branch");
+        ConsoleUtil.info("  push    - Commit model changes to a branch");
+        ConsoleUtil.info("  rm      - Remove elements from the model");
+        ConsoleUtil.info("  merge   - Merge changes between branches");
+        ConsoleUtil.info("");
+        ConsoleUtil.info("Use 'flexo <command> --help' for more information about a command");
+    }
+
+    public static FlexoConfig getConfig() {
+        return config;
+    }
+
+    public String getOrgId() {
+        return orgId;
+    }
+
+    public String getRepoId() {
+        return repoId;
+    }
+
+    public boolean isVerbose() {
+        return verbose;
+    }
+
+    public boolean isNoColor() {
+        return noColor;
+    }
+}
