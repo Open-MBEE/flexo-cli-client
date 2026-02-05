@@ -2,12 +2,17 @@ package org.openmbee.flexo.cli;
 
 import org.openmbee.flexo.cli.commands.*;
 import org.openmbee.flexo.cli.config.FlexoConfig;
+import org.openmbee.flexo.cli.plugin.FlexoPlugin;
+import org.openmbee.flexo.cli.plugin.PluginContext;
+import org.openmbee.flexo.cli.plugin.PluginLoader;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+
+import java.util.List;
 
 /**
  * Main entry point for Flexo CLI
@@ -52,10 +57,29 @@ public class FlexoCLI implements Runnable {
         // Initialize configuration
         config = new FlexoConfig();
 
-        // Create and execute command
-        int exitCode = new CommandLine(new FlexoCLI())
-                .setCaseInsensitiveEnumValuesAllowed(true)
-                .execute(args);
+        // Create CLI instance
+        FlexoCLI cliInstance = new FlexoCLI();
+
+        // Create command line
+        CommandLine commandLine = new CommandLine(cliInstance)
+                .setCaseInsensitiveEnumValuesAllowed(true);
+
+        // Load plugins
+        PluginContext pluginContext = new PluginContext(config, cliInstance);
+        List<FlexoPlugin> plugins = PluginLoader.loadPlugins(pluginContext);
+
+        // Register plugin commands
+        for (FlexoPlugin plugin : plugins) {
+            try {
+                commandLine.addSubcommand(plugin.getCommand());
+                logger.debug("Registered plugin command: {}", plugin.getName());
+            } catch (Exception e) {
+                logger.error("Failed to register plugin {}: {}", plugin.getName(), e.getMessage());
+            }
+        }
+
+        // Execute command
+        int exitCode = commandLine.execute(args);
 
         System.exit(exitCode);
     }

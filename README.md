@@ -371,6 +371,70 @@ The CLI supports the following RDF formats:
 
 Specify format with `--format` option or set default in config.
 
+## Plugin System
+
+Flexo CLI supports a plugin system that allows extending the CLI with additional commands. Plugins are JAR files that implement the FlexoPlugin interface and are loaded dynamically at startup.
+
+### Using Plugins
+
+Plugins are automatically loaded from the `~/.flexo/plugins/` directory:
+
+```bash
+# Create plugins directory
+mkdir -p ~/.flexo/plugins
+
+# Copy plugin JAR to plugins directory
+cp my-plugin.jar ~/.flexo/plugins/
+
+# Verify plugin is loaded
+flexo --help  # Plugin commands will appear in the list
+```
+
+### Available Plugins
+
+#### SysML v2 Plugin
+
+The SysML v2 plugin provides commands for interacting with SysML v2 API services.
+
+**Installation:**
+```bash
+# From the flexo-cli-sysmlv2-plugin directory
+cd ../flexo-cli-sysmlv2-plugin
+./gradlew jar
+cp build/libs/flexo-cli-sysmlv2-plugin-1.0.0.jar ~/.flexo/plugins/
+```
+
+**Usage:**
+```bash
+# List projects
+flexo sysml project list
+
+# Get project details
+flexo sysml project get --project PROJECT_ID
+
+# List elements
+flexo sysml element list --project PROJECT_ID --commit COMMIT_ID
+
+# Query relationships
+flexo sysml relationship list --project PROJECT_ID --commit COMMIT_ID ELEMENT_ID
+```
+
+See the [SysML v2 Plugin README](../flexo-cli-sysmlv2-plugin/README.md) for complete documentation.
+
+### Developing Plugins
+
+You can create your own plugins to extend the Flexo CLI with custom commands. Plugins have full access to:
+- Configuration management
+- HTTP client with authentication
+- Console utilities
+- Parent command options (--org, --repo, --verbose, etc.)
+
+See [README-PLUGINS.md](README-PLUGINS.md) for a complete plugin development guide, including:
+- Plugin architecture and API
+- Step-by-step creation guide
+- Example code
+- Best practices
+
 ## Authentication
 
 ### Local Development Mode (Default)
@@ -522,6 +586,8 @@ See the main project LICENSE file.
 ## Related Projects
 
 - [flexo-mms-layer1-service](../flexo-mms-layer1-service/) - The backend MMS service
+- [flexo-cli-sysmlv2-plugin](../flexo-cli-sysmlv2-plugin/) - SysML v2 plugin for Flexo CLI
+- [flexo-mms-sysmlv2](../flexo-mms-sysmlv2/) - SysML v2 API service
 - [Open-MBEE](https://github.com/Open-MBEE) - Model-Based Engineering Environment
 
 ## Support
