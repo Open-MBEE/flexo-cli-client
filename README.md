@@ -16,29 +16,26 @@ A git-style command-line interface for interacting with Flexo MMS Layer 1 Servic
 ## Quick Start
 
 ```bash
-# 1. Start local MMS services
-docker-compose -f docker-compose.local.yml up -d
-
-# 2. Build and initialize
+# 1. Build the CLI
 ./gradlew installDist
+
+# 2. Initialize (automatically starts Docker services and sets up everything)
 ./build/install/flexo/bin/flexo init
 
-# This creates:
-#   - Organization: "localorg"
-#   - Repository: "localrepo"
-#   - Branch: "master"
+# This command will:
+#   - Start Docker services (Fuseki + MMS Layer 1)
+#   - Generate and load cluster configuration
+#   - Create organization: "localorg"
+#   - Create repository: "localrepo"
+#   - Create branch: "master"
+#   - Configure defaults in ~/.flexo/config
 
-# 3. Configure defaults
-cat >> ~/.flexo/config << EOF
-default.org=localorg
-default.repo=localrepo
-default.branch=master
-EOF
-
-# 4. Start using the CLI
+# 3. Start using the CLI
 flexo branch --list
 flexo pull master --output model.ttl
 ```
+
+**Note**: The `init` command requires Docker to be installed and running.
 
 ## Prerequisites
 
@@ -128,49 +125,32 @@ export FLEXO_DEFAULT_REPO=localrepo
 
 ## Local Development Setup
 
-### 1. Start the MMS services
+The `flexo init` command automatically handles the complete setup process.
 
-From the project root:
+### Prerequisites
 
-```bash
-docker-compose -f docker-compose.local.yml up -d
-```
+- Docker and Docker Compose installed and running
+- Java 17 or later
+- Node.js and `ts-node` (for cluster configuration generation)
 
-This starts:
-- **Fuseki** (quad-store) on port 3030
-- **Flexo MMS Layer 1 Service** on port 8080
-
-### 2. Initialize the MMS
-
-Use the `init` command to set up everything automatically:
+### One-Command Setup
 
 ```bash
-cd flexo-cli-client
+# From the flexo-cli-client directory
 ./gradlew installDist
 ./build/install/flexo/bin/flexo init
 ```
 
 This single command will:
-- Generate cluster configuration (users, policies)
-- Load it into Fuseki
-- Create the default org and repo
-- Set up the master branch
+1. **Start Docker services**: Launches Fuseki (port 3030) and Flexo MMS Layer 1 (port 8080)
+2. **Generate cluster configuration**: Creates users (`root`, `admin`, `anon`) and access policies
+3. **Load configuration into Fuseki**: Sets up the triplestore with user permissions
+4. **Create organization**: `localorg`
+5. **Create repository**: `localrepo`
+6. **Create initial branch**: `master`
+7. **Update ~/.flexo/config**: Sets defaults for convenient CLI usage
 
-### 3. Configure the CLI (Optional)
-
-```bash
-mkdir -p ~/.flexo
-cat > ~/.flexo/config << EOF
-mms.url=http://localhost:8080
-local.mode=true
-local.user=root
-local.jwtSecret=devsecretpleasechangeinproduction1234567890
-default.org=localorg
-default.repo=localrepo
-default.branch=master
-rdf.format=turtle
-EOF
-```
+After initialization completes, you're ready to use the CLI immediately!
 
 ## Usage
 
@@ -205,14 +185,16 @@ flexo --org myorg --repo myrepo push master --message "Update" --input model.ttl
 
 ### Init Command
 
-Initialize a local Flexo MMS instance with a default organization and repository. This command automates the complete setup process for local development.
+Initialize a local Flexo MMS instance with automatic Docker service startup. This command automates the complete setup process for local development.
 
 **What it does:**
-1. Generates cluster configuration with default users (`root`, `admin`, `anon`)
-2. Loads access control policies into Fuseki triplestore
-3. Creates default organization: `localorg`
-4. Creates default repository: `localrepo`
-5. Automatically creates the `master` branch
+1. Starts Docker services (Fuseki triplestore and MMS Layer 1 service)
+2. Generates cluster configuration with default users (`root`, `admin`, `anon`)
+3. Loads access control policies into Fuseki triplestore
+4. Creates default organization: `localorg`
+5. Creates default repository: `localrepo`
+6. Automatically creates the `master` branch
+7. Updates ~/.flexo/config with sensible defaults
 
 ```bash
 # Initialize with defaults (org: localorg, repo: localrepo)
@@ -223,6 +205,9 @@ flexo --org myorg --repo myrepo init
 
 # Force re-initialization if resources already exist
 flexo init --force
+
+# Skip Docker startup if services are already running
+flexo init --skip-docker
 ```
 
 After initialization, you can immediately use the CLI:
@@ -234,18 +219,20 @@ flexo branch --list
 # Or explicitly specify org/repo
 flexo --org localorg --repo localrepo branch --list
 
-# Set defaults in config for convenience
-echo "default.org=localorg" >> ~/.flexo/config
-echo "default.repo=localrepo" >> ~/.flexo/config
-
-# Now you can omit --org and --repo in all commands
+# Defaults are already set in ~/.flexo/config, so you can omit flags
 flexo branch --list
+flexo pull master --output model.ttl
 ```
 
 **Prerequisites:**
-- Docker services must be running (see Local Development Setup)
+- Docker and Docker Compose must be installed and running
 - The `flexo-mms-layer1-service/deploy` directory must be accessible (for generating cluster.trig)
 - Node.js and `ts-node` must be available for cluster generation
+
+**Troubleshooting:**
+- If Docker services fail to start, check `docker ps` and logs: `docker logs layer1-service`
+- If you already have services running, use `--skip-docker` flag
+- To stop services: `docker-compose -f docker-compose.local.yml down`
 
 ### Global Options
 
@@ -493,32 +480,22 @@ flexo merge feature --target master --no-commit
 ### Example 5: Complete workflow from scratch
 
 ```bash
-# 1. Start Docker services
-docker-compose -f docker-compose.local.yml up -d
-
-# 2. Build and initialize MMS
+# 1. Build and initialize (automatically starts Docker)
 cd flexo-cli-client
 ./gradlew installDist
 ./build/install/flexo/bin/flexo init
 
-# This creates:
-#   - Organization: localorg
-#   - Repository: localrepo
-#   - Branch: master
+# This automatically:
+#   - Starts Docker services (Fuseki + MMS)
+#   - Creates: Organization (localorg), Repository (localrepo), Branch (master)
+#   - Configures ~/.flexo/config with defaults
 
-# 3. Configure defaults for convenience
-cat >> ~/.flexo/config << EOF
-default.org=localorg
-default.repo=localrepo
-default.branch=master
-EOF
-
-# 4. Verify setup
+# 2. Verify setup
 flexo branch --list
 # Output: Branch    Commit    ETag
 #         master    ...       ...
 
-# 5. Work with the CLI
+# 3. Work with the CLI
 flexo pull master --output model.ttl
 # Edit model.ttl...
 flexo push master --message "My changes" --input model.ttl
@@ -649,11 +626,32 @@ auth.sshKeyPath=~/.ssh/flexo_rsa
 
 ## Troubleshooting
 
+### Docker services not starting
+
+```bash
+# Check if Docker is running
+docker --version
+docker ps
+
+# If init fails, try manual Docker startup
+docker-compose -f docker-compose.local.yml up -d
+
+# Then run init with --skip-docker
+flexo init --skip-docker
+
+# Check service logs
+docker logs layer1-service
+docker logs quad-store-server
+```
+
 ### Connection refused
 
 ```bash
 # Check if services are running
 docker ps
+
+# Restart services if needed
+docker-compose -f docker-compose.local.yml restart
 
 # Check service logs
 docker logs layer1-service
