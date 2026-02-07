@@ -50,8 +50,48 @@ public class AuthenticationHandler {
         this.localUser = localUser;
         this.localJwtSecret = localJwtSecret;
 
+        // Validate JWT secret in local mode
+        if (localMode) {
+            validateJwtSecret(localJwtSecret);
+        }
+
         if (enabled && !localMode) {
             loadPrivateKey();
+        }
+    }
+
+    /**
+     * Validate JWT secret for security
+     */
+    private void validateJwtSecret(String secret) {
+        if (secret == null || secret.isEmpty()) {
+            logger.error("SECURITY WARNING: local.jwtSecret is not configured. JWT authentication will fail.");
+            logger.error("Please set local.jwtSecret in ~/.flexo/config");
+            return;
+        }
+
+        if (secret.length() < 32) {
+            logger.warn("SECURITY WARNING: local.jwtSecret is too short (minimum 32 characters recommended)");
+        }
+
+        // Check for common weak secrets
+        String[] weakSecrets = {
+            "devsecret",
+            "secret",
+            "password",
+            "changeme",
+            "test",
+            "dev",
+            "local"
+        };
+
+        String lowerSecret = secret.toLowerCase();
+        for (String weak : weakSecrets) {
+            if (lowerSecret.contains(weak)) {
+                logger.warn("SECURITY WARNING: local.jwtSecret appears to contain weak or default values");
+                logger.warn("Please use a strong, randomly generated secret for production use");
+                break;
+            }
         }
     }
 

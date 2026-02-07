@@ -649,6 +649,16 @@ flexo-cli-client/
 ./gradlew test
 ```
 
+### Security scanning
+
+Run OWASP Dependency Check to scan for vulnerabilities:
+
+```bash
+./gradlew dependencyCheckAnalyze
+```
+
+View the report at `build/reports/dependency-check-report.html`
+
 ### Building documentation
 
 ```bash

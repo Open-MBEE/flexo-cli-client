@@ -1,11 +1,9 @@
 package org.openmbee.flexo.cli.commands;
 
 import org.openmbee.flexo.cli.FlexoCLI;
-import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Branch;
-import org.openmbee.flexo.cli.model.Remote;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -22,10 +20,10 @@ import java.util.List;
         description = "List, create, or delete branches",
         mixinStandardHelpOptions = true
 )
-public class BranchCommand implements Runnable {
+public class BranchCommand extends BaseCommand {
 
     @ParentCommand
-    private FlexoCLI parent;
+    protected FlexoCLI parent;
 
     @Option(names = {"-l", "--list"}, description = "List all branches")
     private boolean list = false;
@@ -43,62 +41,17 @@ public class BranchCommand implements Runnable {
     private String branchName;
 
     @Override
-    public void run() {
-        FlexoConfig config = FlexoCLI.getConfig();
+    protected void executeCommand() throws Exception {
+        FlexoConfig config = getConfig();
 
         // Get org and repo from options or config
-        String orgId = parent.getOrgId() != null ? parent.getOrgId() : config.getDefaultOrg();
-        String repoId = parent.getRepoId() != null ? parent.getRepoId() : config.getDefaultRepo();
-
-        if (orgId == null || orgId.isEmpty()) {
-            ConsoleUtil.error("Organization ID is required. Use --org or set default.org in config");
-            System.exit(1);
-        }
-
-        if (repoId == null || repoId.isEmpty()) {
-            ConsoleUtil.error("Repository ID is required. Use --repo or set default.repo in config");
-            System.exit(1);
-        }
-
-        // Get remote configuration
-        String remoteName = parent.getRemoteName() != null ? parent.getRemoteName() : config.getDefaultRemote();
-        Remote remote = config.getRemote(remoteName);
+        String orgId = getOrgId(config);
+        String repoId = getRepoId(config);
         
-        // Fall back to legacy configuration if no remote found
-        String mmsUrl;
-        boolean authEnabled;
-        String sshKeyPath;
-        boolean localMode;
-        String localUser;
-        String localJwtSecret;
-        
-        if (remote != null) {
-            mmsUrl = remote.getUrl();
-            authEnabled = remote.isAuthEnabledBoolean();
-            sshKeyPath = remote.getSshKeyPath();
-            localMode = remote.isLocalModeBoolean();
-            localUser = remote.getLocalUser() != null ? remote.getLocalUser() : config.getLocalUser();
-            localJwtSecret = remote.getLocalJwtSecret() != null ? remote.getLocalJwtSecret() : config.getLocalJwtSecret();
-        } else {
-            // Use legacy configuration
-            mmsUrl = config.getMmsUrl();
-            authEnabled = config.isAuthEnabled();
-            sshKeyPath = config.getSshKeyPath();
-            localMode = config.isLocalMode();
-            localUser = config.getLocalUser();
-            localJwtSecret = config.getLocalJwtSecret();
-        }
+        // Validate org and repo
+        validateOrgAndRepo(orgId, repoId);
 
-        // Create authentication handler
-        AuthenticationHandler authHandler = new AuthenticationHandler(
-                authEnabled,
-                sshKeyPath,
-                localMode,
-                localUser,
-                localJwtSecret
-        );
-
-        try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler)) {
+        try (FlexoMmsClient client = createClient(config)) {
             if (create) {
                 createBranch(client, orgId, repoId);
             } else if (delete) {
@@ -106,12 +59,6 @@ public class BranchCommand implements Runnable {
             } else {
                 listBranches(client, orgId, repoId);
             }
-        } catch (Exception e) {
-            ConsoleUtil.error("Branch operation failed: " + e.getMessage());
-            if (parent.isVerbose()) {
-                e.printStackTrace();
-            }
-            System.exit(1);
         }
     }
 
@@ -140,8 +87,7 @@ public class BranchCommand implements Runnable {
 
     private void createBranch(FlexoMmsClient client, String orgId, String repoId) throws Exception {
         if (branchName == null || branchName.isEmpty()) {
-            ConsoleUtil.error("Branch name is required for creation");
-            System.exit(1);
+            throw new CommandException("Branch name is required for creation", 1);
         }
 
         ConsoleUtil.info("Creating branch '" + branchName + "'...");
@@ -154,18 +100,15 @@ public class BranchCommand implements Runnable {
                 ConsoleUtil.info("Points to commit: " + branch.getCommitId());
             }
         } else {
-            ConsoleUtil.error("Failed to create branch");
-            System.exit(1);
+            throw new CommandException("Failed to create branch", 1);
         }
     }
 
     private void deleteBranch(FlexoMmsClient client, String orgId, String repoId) throws Exception {
         if (branchName == null || branchName.isEmpty()) {
-            ConsoleUtil.error("Branch name is required for deletion");
-            System.exit(1);
+            throw new CommandException("Branch name is required for deletion", 1);
         }
 
-        ConsoleUtil.warn("Branch deletion is not yet implemented in the MMS API");
-        System.exit(1);
+        throw new CommandException("Branch deletion is not yet implemented in the MMS API", 1);
     }
 }

@@ -1,6 +1,13 @@
 package org.openmbee.flexo.cli;
 
-import org.openmbee.flexo.cli.commands.*;
+import org.openmbee.flexo.cli.commands.BranchCommand;
+import org.openmbee.flexo.cli.commands.InitCommand;
+import org.openmbee.flexo.cli.commands.MergeCommand;
+import org.openmbee.flexo.cli.commands.PullCommand;
+import org.openmbee.flexo.cli.commands.PushCommand;
+import org.openmbee.flexo.cli.commands.RemoteCommand;
+import org.openmbee.flexo.cli.commands.RmCommand;
+import org.openmbee.flexo.cli.commands.BaseCommand;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.plugin.FlexoPlugin;
 import org.openmbee.flexo.cli.plugin.PluginContext;
@@ -82,8 +89,18 @@ public class FlexoCLI implements Runnable {
             }
         }
 
-        // Execute command
-        int exitCode = commandLine.execute(args);
+        // Execute command and handle CommandException
+        int exitCode;
+        try {
+            exitCode = commandLine.execute(args);
+        } catch (BaseCommand.CommandException e) {
+            // CommandException already logged error message
+            exitCode = e.getExitCode();
+        } catch (Exception e) {
+            ConsoleUtil.error("Unexpected error: " + e.getMessage());
+            logger.error("Unexpected error", e);
+            exitCode = 1;
+        }
 
         System.exit(exitCode);
     }
