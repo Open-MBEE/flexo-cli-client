@@ -17,9 +17,7 @@ services:
       - flexo-local
 
   layer1-service:
-    build:
-      context: ../flexo-mms-layer1-service
-      dockerfile: Dockerfile
+    image: openmbee/flexo-mms-layer1-service:latest
     hostname: layer1-service
     container_name: layer1-service
     environment:
