@@ -11,6 +11,18 @@ build/
 *.swo
 *~
 
+# Eclipse
+.project
+.classpath
+.settings/
+.factorypath
+bin/
+.metadata/
+.recommenders/
+tmp/
+*.tmp
+*.bak
+
 # Java
 *.class
 *.jar
@@ -25,3 +37,8 @@ Thumbs.db
 
 # Local config
 local.properties
+
+# OWASP Dependency Check
+dependency-check-report.html
+dependency-check-report.json
+dependency-check-data/

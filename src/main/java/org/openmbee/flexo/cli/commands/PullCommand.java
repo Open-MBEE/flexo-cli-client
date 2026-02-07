@@ -2,7 +2,6 @@ package org.openmbee.flexo.cli.commands;
 
 import org.apache.jena.rdf.model.Model;
 import org.openmbee.flexo.cli.FlexoCLI;
-import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
@@ -12,7 +11,6 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
 
-import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 /**
@@ -23,10 +21,10 @@ import java.io.OutputStream;
         description = "Fetch model from a branch",
         mixinStandardHelpOptions = true
 )
-public class PullCommand implements Runnable {
+public class PullCommand extends BaseCommand {
 
     @ParentCommand
-    private FlexoCLI parent;
+    protected FlexoCLI parent;
 
     @Option(names = {"-b", "--branch"}, description = "Branch name")
     private String branchName;
@@ -41,8 +39,8 @@ public class PullCommand implements Runnable {
     private String branchParam;
 
     @Override
-    public void run() {
-        FlexoConfig config = FlexoCLI.getConfig();
+    protected void executeCommand() throws Exception {
+        FlexoConfig config = getConfig();
 
         // Determine branch name
         String branch = branchName != null ? branchName : branchParam;
@@ -51,37 +49,21 @@ public class PullCommand implements Runnable {
         }
 
         if (branch == null || branch.isEmpty()) {
-            ConsoleUtil.error("Branch name is required. Use -b/--branch or set default.branch in config");
-            System.exit(1);
+            throw new CommandException(
+                "Branch name is required. Use -b/--branch or set default.branch in config", 1);
         }
 
         // Get org and repo
-        String orgId = parent.getOrgId() != null ? parent.getOrgId() : config.getDefaultOrg();
-        String repoId = parent.getRepoId() != null ? parent.getRepoId() : config.getDefaultRepo();
-
-        if (orgId == null || orgId.isEmpty()) {
-            ConsoleUtil.error("Organization ID is required. Use --org or set default.org in config");
-            System.exit(1);
-        }
-
-        if (repoId == null || repoId.isEmpty()) {
-            ConsoleUtil.error("Repository ID is required. Use --repo or set default.repo in config");
-            System.exit(1);
-        }
+        String orgId = getOrgId(config);
+        String repoId = getRepoId(config);
+        
+        // Validate org and repo
+        validateOrgAndRepo(orgId, repoId);
 
         // Determine format
         String rdfFormat = format != null ? format : config.getRdfFormat();
 
-        // Create authentication handler
-        AuthenticationHandler authHandler = new AuthenticationHandler(
-                config.isAuthEnabled(),
-                config.getSshKeyPath(),
-                config.isLocalMode(),
-                config.getLocalUser(),
-                config.getLocalJwtSecret()
-        );
-
-        try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
+        try (FlexoMmsClient client = createClient(config)) {
             ConsoleUtil.info("Pulling from " + orgId + "/" + repoId + "/" + branch + "...");
 
             // Fetch model
@@ -104,13 +86,6 @@ public class PullCommand implements Runnable {
                     RdfParser.toStream(model, out, rdfFormat);
                 }
             }
-
-        } catch (Exception e) {
-            ConsoleUtil.error("Pull failed: " + e.getMessage());
-            if (parent.isVerbose()) {
-                e.printStackTrace();
-            }
-            System.exit(1);
         }
     }
 }

@@ -1,6 +1,13 @@
 package org.openmbee.flexo.cli;
 
-import org.openmbee.flexo.cli.commands.*;
+import org.openmbee.flexo.cli.commands.BranchCommand;
+import org.openmbee.flexo.cli.commands.InitCommand;
+import org.openmbee.flexo.cli.commands.MergeCommand;
+import org.openmbee.flexo.cli.commands.PullCommand;
+import org.openmbee.flexo.cli.commands.PushCommand;
+import org.openmbee.flexo.cli.commands.RemoteCommand;
+import org.openmbee.flexo.cli.commands.RmCommand;
+import org.openmbee.flexo.cli.commands.BaseCommand;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.plugin.FlexoPlugin;
 import org.openmbee.flexo.cli.plugin.PluginContext;
@@ -30,6 +37,7 @@ import java.util.List;
                 PushCommand.class,
                 RmCommand.class,
                 MergeCommand.class,
+                RemoteCommand.class,
                 CommandLine.HelpCommand.class
         }
 )
@@ -47,6 +55,9 @@ public class FlexoCLI implements Runnable {
 
     @Option(names = {"--repo"}, description = "Repository ID", scope = CommandLine.ScopeType.INHERIT)
     private String repoId;
+
+    @Option(names = {"--remote"}, description = "Remote name (default: origin)", scope = CommandLine.ScopeType.INHERIT)
+    private String remoteName;
 
     @Option(names = {"--no-color"}, description = "Disable colored output", scope = CommandLine.ScopeType.INHERIT)
     private boolean noColor;
@@ -78,8 +89,18 @@ public class FlexoCLI implements Runnable {
             }
         }
 
-        // Execute command
-        int exitCode = commandLine.execute(args);
+        // Execute command and handle CommandException
+        int exitCode;
+        try {
+            exitCode = commandLine.execute(args);
+        } catch (BaseCommand.CommandException e) {
+            // CommandException already logged error message
+            exitCode = e.getExitCode();
+        } catch (Exception e) {
+            ConsoleUtil.error("Unexpected error: " + e.getMessage());
+            logger.error("Unexpected error", e);
+            exitCode = 1;
+        }
 
         System.exit(exitCode);
     }
@@ -91,6 +112,7 @@ public class FlexoCLI implements Runnable {
         ConsoleUtil.info("");
         ConsoleUtil.info("Available commands:");
         ConsoleUtil.info("  init    - Initialize local MMS with default org and repo");
+        ConsoleUtil.info("  remote  - Manage remote MMS instances");
         ConsoleUtil.info("  branch  - List, create, or manage branches");
         ConsoleUtil.info("  pull    - Fetch model from a branch");
         ConsoleUtil.info("  push    - Commit model changes to a branch");
@@ -118,5 +140,9 @@ public class FlexoCLI implements Runnable {
 
     public boolean isNoColor() {
         return noColor;
+    }
+
+    public String getRemoteName() {
+        return remoteName;
     }
 }

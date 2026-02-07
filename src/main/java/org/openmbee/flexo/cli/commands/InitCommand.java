@@ -14,10 +14,11 @@ import picocli.CommandLine.ParentCommand;
 
 /**
  * Init command - Initialize a local Flexo MMS instance with default org and repo
+ * Automatically starts Docker services and sets up the complete environment
  */
 @Command(
         name = "init",
-        description = "Initialize local Flexo MMS with default org 'localorg' and repo 'localrepo'",
+        description = "Initialize local Flexo MMS (starts Docker, creates org 'localorg' and repo 'localrepo')",
         mixinStandardHelpOptions = true
 )
 public class InitCommand implements Runnable {
@@ -31,6 +32,9 @@ public class InitCommand implements Runnable {
     @Option(names = {"--force"}, description = "Force initialization even if resources exist")
     private boolean force = false;
 
+    @Option(names = {"--skip-docker"}, description = "Skip Docker services startup (assumes services already running)")
+    private boolean skipDocker = false;
+
     @Override
     public void run() {
         FlexoConfig config = FlexoCLI.getConfig();
@@ -41,47 +45,57 @@ public class InitCommand implements Runnable {
 
         ConsoleUtil.info("Initializing Flexo MMS at " + config.getMmsUrl());
         ConsoleUtil.info("This will:");
+        if (!skipDocker) {
+            ConsoleUtil.info("  0. Start Docker services (Fuseki and MMS Layer 1)");
+        }
         ConsoleUtil.info("  1. Generate and load cluster configuration (users, policies)");
         ConsoleUtil.info("  2. Create org: " + orgId);
         ConsoleUtil.info("  3. Create repo: " + repoId);
         ConsoleUtil.info("  4. Create branch: " + branchId);
 
-        // Create authentication handler
-        AuthenticationHandler authHandler = new AuthenticationHandler(
-                config.isAuthEnabled(),
-                config.getSshKeyPath(),
-                config.isLocalMode(),
-                config.getLocalUser(),
-                config.getLocalJwtSecret()
-        );
+        try {
+            // Step 0: Start Docker services
+            if (!skipDocker) {
+                startDockerServices();
+            }
 
-        try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
-            // Step 0: Generate and load cluster.trig
-            generateAndLoadClusterConfig(client, config.getMmsUrl());
+            // Create authentication handler
+            AuthenticationHandler authHandler = new AuthenticationHandler(
+                    config.isAuthEnabled(),
+                    config.getSshKeyPath(),
+                    config.isLocalMode(),
+                    config.getLocalUser(),
+                    config.getLocalJwtSecret()
+            );
 
-            // Step 1: Create organization
-            createOrg(client, orgId);
+            try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
+                // Step 1: Generate and load cluster.trig
+                generateAndLoadClusterConfig(client, config.getMmsUrl());
 
-            // Step 2: Create repository
-            createRepo(client, orgId, repoId);
+                // Step 2: Create organization
+                createOrg(client, orgId);
 
-            // Step 3: Create initial branch with empty commit
-            createInitialBranch(client, orgId, repoId, branchId);
+                // Step 3: Create repository
+                createRepo(client, orgId, repoId);
 
-            ConsoleUtil.success("Initialization complete!");
+                // Step 4: Create initial branch with empty commit
+                createInitialBranch(client, orgId, repoId, branchId);
 
-            // Update configuration file with defaults
-            updateConfigDefaults(config, orgId, repoId);
+                ConsoleUtil.success("Initialization complete!");
 
-            ConsoleUtil.info("");
-            ConsoleUtil.info("Configuration updated in ~/.flexo/config with:");
-            ConsoleUtil.info("  default.org=" + orgId);
-            ConsoleUtil.info("  default.repo=" + repoId);
-            ConsoleUtil.info("");
-            ConsoleUtil.info("You can now use the CLI without specifying org/repo:");
-            ConsoleUtil.info("  flexo branch --list");
-            ConsoleUtil.info("  flexo pull master");
-            ConsoleUtil.info("  flexo push master --message \"My changes\" --input model.ttl");
+                // Update configuration file with defaults
+                updateConfigDefaults(config, orgId, repoId);
+
+                ConsoleUtil.info("");
+                ConsoleUtil.info("Configuration updated in ~/.flexo/config with:");
+                ConsoleUtil.info("  default.org=" + orgId);
+                ConsoleUtil.info("  default.repo=" + repoId);
+                ConsoleUtil.info("");
+                ConsoleUtil.info("You can now use the CLI without specifying org/repo:");
+                ConsoleUtil.info("  flexo branch --list");
+                ConsoleUtil.info("  flexo pull master");
+                ConsoleUtil.info("  flexo push master --message \"My changes\" --input model.ttl");
+            }
 
         } catch (Exception e) {
             ConsoleUtil.error("Initialization failed: " + e.getMessage());
@@ -90,6 +104,135 @@ public class InitCommand implements Runnable {
             }
             System.exit(1);
         }
+    }
+
+    private void startDockerServices() throws Exception {
+        ConsoleUtil.info("Starting Docker services...");
+        
+        // Extract docker-compose file from classpath to temporary location
+        java.io.File composeFile = extractDockerComposeFromClasspath();
+        if (composeFile == null) {
+            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
+                    "Please ensure the application is properly packaged.");
+        }
+
+        ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
+
+        // Check if Docker is available
+        if (!isDockerAvailable()) {
+            throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
+        }
+
+        // Start services using docker-compose
+        ProcessBuilder pb = new ProcessBuilder(
+                "docker-compose", "-f", composeFile.getAbsolutePath(), "up", "-d"
+        );
+        pb.redirectErrorStream(true);
+
+        Process process = pb.start();
+
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  " + line);
+                }
+            }
+        }
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new Exception("Failed to start Docker services: docker-compose exited with code " + exitCode);
+        }
+
+        ConsoleUtil.success("  Docker services started");
+        ConsoleUtil.info("  Waiting for services to be ready...");
+
+        // Wait for services to be healthy
+        waitForServices();
+    }
+
+    private java.io.File extractDockerComposeFromClasspath() throws Exception {
+        // Load docker-compose file from classpath
+        java.io.InputStream resourceStream = getClass().getClassLoader()
+                .getResourceAsStream("flexo-mms-docker-compose.yml");
+        
+        if (resourceStream == null) {
+            return null;
+        }
+
+        // Create temporary file
+        java.io.File tempFile = java.io.File.createTempFile("flexo-mms-docker-compose-", ".yml");
+        tempFile.deleteOnExit(); // Clean up on JVM exit
+
+        // Copy resource to temporary file
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
+             java.io.BufferedOutputStream bos = new java.io.BufferedOutputStream(fos)) {
+            
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = resourceStream.read(buffer)) != -1) {
+                bos.write(buffer, 0, bytesRead);
+            }
+            bos.flush();
+        } finally {
+            resourceStream.close();
+        }
+
+        if (parent.isVerbose()) {
+            ConsoleUtil.debug("  Extracted docker-compose file to: " + tempFile.getAbsolutePath());
+        }
+
+        return tempFile;
+    }
+
+    private boolean isDockerAvailable() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("docker", "--version");
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void waitForServices() throws Exception {
+        // Wait for Fuseki (port 3030) and MMS (port 8080) to be available
+        int maxAttempts = 30;
+        int attempt = 0;
+        
+        while (attempt < maxAttempts) {
+            try {
+                // Check Fuseki
+                java.net.Socket fusekiSocket = new java.net.Socket();
+                fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
+                fusekiSocket.close();
+
+                // Check MMS
+                java.net.Socket mmsSocket = new java.net.Socket();
+                mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
+                mmsSocket.close();
+
+                // Both services are up
+                ConsoleUtil.success("  Services are ready");
+                return;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt < maxAttempts) {
+                    Thread.sleep(2000);
+                    if (parent.isVerbose()) {
+                        ConsoleUtil.debug("  Waiting for services... (attempt " + attempt + "/" + maxAttempts + ")");
+                    }
+                }
+            }
+        }
+
+        throw new Exception("Services did not become ready within timeout. Please check Docker logs:\n" +
+                "  docker logs layer1-service\n" +
+                "  docker logs quad-store-server");
     }
 
     private void createOrg(FlexoMmsClient client, String orgId) throws Exception {
@@ -324,9 +467,7 @@ public class InitCommand implements Runnable {
         if (config.get("local.user") == null) {
             config.set("local.user", "root");
         }
-        if (config.get("local.jwtSecret") == null) {
-            config.set("local.jwtSecret", "devsecretpleasechangeinproduction1234567890");
-        }
+        // JWT secret is auto-generated by getLocalJwtSecret() if not present
         if (config.get("default.branch") == null) {
             config.set("default.branch", "master");
         }

@@ -1,5 +1,6 @@
 package org.openmbee.flexo.cli.config;
 
+import org.openmbee.flexo.cli.model.Remote;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -7,7 +8,8 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Properties;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Configuration management for Flexo CLI.
@@ -161,6 +163,160 @@ public class FlexoConfig {
     }
 
     public String getLocalJwtSecret() {
-        return get("local.jwtSecret", "dev-secret-please-change-in-production");
+        String secret = get("local.jwtSecret");
+        
+        // If no secret is configured, generate and save one
+        if (secret == null || secret.isEmpty()) {
+            secret = generateJwtSecret();
+            set("local.jwtSecret", secret);
+            try {
+                save();
+                logger.info("Generated and saved new JWT secret");
+            } catch (IOException e) {
+                logger.warn("Failed to save generated JWT secret: {}", e.getMessage());
+            }
+        }
+        
+        return secret;
+    }
+    
+    /**
+     * Generate a secure random JWT secret (64 characters, base64-encoded)
+     */
+    private String generateJwtSecret() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] bytes = new byte[48]; // 48 bytes = 64 base64 characters
+        random.nextBytes(bytes);
+        return java.util.Base64.getEncoder().encodeToString(bytes);
+    }
+
+    // Remote management methods
+
+    /**
+     * Get all configured remotes
+     */
+    public Map<String, Remote> getRemotes() {
+        Map<String, Remote> remotes = new LinkedHashMap<>();
+        
+        // Find all remote.* properties
+        Set<String> remoteNames = new HashSet<>();
+        for (String key : properties.stringPropertyNames()) {
+            if (key.startsWith("remote.") && key.contains(".url")) {
+                String remoteName = key.substring(7, key.indexOf(".url"));
+                remoteNames.add(remoteName);
+            }
+        }
+        
+        // Build Remote objects
+        for (String name : remoteNames) {
+            Remote remote = new Remote();
+            remote.setName(name);
+            remote.setUrl(get("remote." + name + ".url"));
+            remote.setAuthEnabled(get("remote." + name + ".authEnabled"));
+            remote.setSshKeyPath(get("remote." + name + ".sshKeyPath"));
+            remote.setLocalMode(get("remote." + name + ".localMode"));
+            remote.setLocalUser(get("remote." + name + ".localUser"));
+            remote.setLocalJwtSecret(get("remote." + name + ".localJwtSecret"));
+            remotes.put(name, remote);
+        }
+        
+        return remotes;
+    }
+
+    /**
+     * Get a specific remote by name
+     */
+    public Remote getRemote(String name) {
+        String url = get("remote." + name + ".url");
+        if (url == null) {
+            return null;
+        }
+        
+        Remote remote = new Remote();
+        remote.setName(name);
+        remote.setUrl(url);
+        remote.setAuthEnabled(get("remote." + name + ".authEnabled"));
+        remote.setSshKeyPath(get("remote." + name + ".sshKeyPath"));
+        remote.setLocalMode(get("remote." + name + ".localMode"));
+        remote.setLocalUser(get("remote." + name + ".localUser"));
+        remote.setLocalJwtSecret(get("remote." + name + ".localJwtSecret"));
+        
+        return remote;
+    }
+
+    /**
+     * Add or update a remote
+     */
+    public void setRemote(Remote remote) {
+        String prefix = "remote." + remote.getName();
+        set(prefix + ".url", remote.getUrl());
+        
+        if (remote.getAuthEnabled() != null) {
+            set(prefix + ".authEnabled", remote.getAuthEnabled());
+        }
+        if (remote.getSshKeyPath() != null) {
+            set(prefix + ".sshKeyPath", remote.getSshKeyPath());
+        }
+        if (remote.getLocalMode() != null) {
+            set(prefix + ".localMode", remote.getLocalMode());
+        }
+        if (remote.getLocalUser() != null) {
+            set(prefix + ".localUser", remote.getLocalUser());
+        }
+        if (remote.getLocalJwtSecret() != null) {
+            set(prefix + ".localJwtSecret", remote.getLocalJwtSecret());
+        }
+    }
+
+    /**
+     * Remove a remote
+     */
+    public void removeRemote(String name) {
+        String prefix = "remote." + name;
+        List<String> keysToRemove = properties.stringPropertyNames().stream()
+                .filter(key -> key.startsWith(prefix + "."))
+                .collect(Collectors.toList());
+        
+        for (String key : keysToRemove) {
+            properties.remove(key);
+        }
+    }
+
+    /**
+     * Get the default remote name
+     */
+    public String getDefaultRemote() {
+        return get("default.remote", "origin");
+    }
+
+    /**
+     * Set the default remote name
+     */
+    public void setDefaultRemote(String remoteName) {
+        set("default.remote", remoteName);
+    }
+
+    /**
+     * Get remote URL by name, or fall back to legacy mms.url
+     */
+    public String getRemoteUrl(String remoteName) {
+        if (remoteName == null || remoteName.isEmpty()) {
+            remoteName = getDefaultRemote();
+        }
+        
+        Remote remote = getRemote(remoteName);
+        if (remote != null) {
+            return remote.getUrl();
+        }
+        
+        // Fall back to legacy mms.url for backward compatibility
+        return getMmsUrl();
+    }
+
+    /**
+     * Check if a remote with the given name exists
+     */
+    public boolean hasRemote(String name) {
+        return get("remote." + name + ".url") != null;
     }
 }

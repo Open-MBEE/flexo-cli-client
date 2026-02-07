@@ -1,0 +1,130 @@
+# Example Flexo CLI Configuration with Multiple Remotes
+# Location: ~/.flexo/config
+
+# ===================================================================
+# DEFAULT SETTINGS
+# ===================================================================
+
+# Default remote to use when --remote is not specified
+default.remote=origin
+
+# Default organization, repository, and branch
+default.org=localorg
+default.repo=localrepo
+default.branch=master
+
+# Default RDF format for operations
+rdf.format=turtle
+
+# Logging level (DEBUG, INFO, WARN, ERROR)
+logging.level=INFO
+
+# ===================================================================
+# LEGACY CONFIGURATION (Backward Compatibility)
+# ===================================================================
+# These settings are used when no remotes are configured
+# They provide backward compatibility with older configurations
+
+# MMS Layer 1 Service URL (used as fallback)
+mms.url=http://localhost:8080
+
+# Legacy authentication settings
+auth.enabled=false
+auth.sshKeyPath=~/.ssh/id_rsa
+
+# Legacy local mode settings
+local.mode=true
+local.user=root
+local.jwtSecret=dev-secret-please-change-in-production
+
+# ===================================================================
+# REMOTE: origin (Local Development)
+# ===================================================================
+
+remote.origin.url=http://localhost:8080
+remote.origin.localMode=true
+remote.origin.localUser=root
+remote.origin.localJwtSecret=devsecretpleasechangeinproduction1234567890
+
+# ===================================================================
+# REMOTE: staging (Staging Environment)
+# ===================================================================
+
+remote.staging.url=http://staging.mms.example.com:8080
+remote.staging.localMode=false
+remote.staging.authEnabled=true
+remote.staging.sshKeyPath=~/.ssh/staging_rsa
+
+# ===================================================================
+# REMOTE: production (Production Environment)
+# ===================================================================
+
+remote.production.url=https://mms.example.com
+remote.production.localMode=false
+remote.production.authEnabled=true
+remote.production.sshKeyPath=~/.ssh/production_rsa
+
+# ===================================================================
+# CONFIGURATION NOTES
+# ===================================================================
+#
+# Remote Configuration Properties:
+# ---------------------------------
+# remote.<name>.url                - Remote MMS service URL (required)
+# remote.<name>.authEnabled        - Enable SSH key authentication
+# remote.<name>.sshKeyPath         - Path to SSH private key
+# remote.<name>.localMode          - Enable local development mode
+# remote.<name>.localUser          - User name for local mode
+# remote.<name>.localJwtSecret     - JWT secret for local mode
+#
+# Authentication Priority:
+# -----------------------
+# 1. Remote-specific settings (remote.<name>.*)
+# 2. Falls back to global settings for missing properties
+# 3. Falls back to legacy settings (local.*, auth.*)
+#
+# Local Mode vs SSH Authentication:
+# ---------------------------------
+# Local Mode (for development):
+#   - Set localMode=true
+#   - Provide localUser and localJwtSecret
+#   - No SSH key required
+#
+# SSH Authentication (for production):
+#   - Set localMode=false
+#   - Set authEnabled=true
+#   - Provide sshKeyPath
+#
+# Managing Remotes:
+# -----------------
+# Use the CLI commands instead of editing this file directly:
+#
+#   flexo remote add <name> <url>         - Add a new remote
+#   flexo remote list                     - List all remotes
+#   flexo remote show <name>              - Show remote details
+#   flexo remote set-url <name> <url>     - Update remote URL
+#   flexo remote rename <old> <new>       - Rename a remote
+#   flexo remote remove <name>            - Remove a remote
+#
+# Using Remotes:
+# --------------
+# Specify remote with --remote option:
+#
+#   flexo --remote production pull master
+#   flexo --remote staging push master --message "Deploy"
+#   flexo --remote origin branch --list
+#
+# If --remote is not specified, the default remote is used (default.remote)
+#
+# Environment Variables:
+# ---------------------
+# You can override configuration with environment variables:
+#
+#   FLEXO_MMS_URL           - Override mms.url
+#   FLEXO_DEFAULT_ORG       - Override default.org
+#   FLEXO_DEFAULT_REPO      - Override default.repo
+#   FLEXO_DEFAULT_REMOTE    - Override default.remote
+#
+# Format: FLEXO_<KEY_WITH_UNDERSCORES>
+# Example: FLEXO_RDF_FORMAT=jsonld
+#

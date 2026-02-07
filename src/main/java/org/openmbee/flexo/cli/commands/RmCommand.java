@@ -15,10 +15,10 @@ import picocli.CommandLine.ParentCommand;
         description = "Remove elements from the model",
         mixinStandardHelpOptions = true
 )
-public class RmCommand implements Runnable {
+public class RmCommand extends BaseCommand {
 
     @ParentCommand
-    private FlexoCLI parent;
+    protected FlexoCLI parent;
 
     @Option(names = {"-i", "--iri"}, description = "IRI of element to remove")
     private String iri;
@@ -33,7 +33,7 @@ public class RmCommand implements Runnable {
     private String iriParam;
 
     @Override
-    public void run() {
+    protected void executeCommand() throws Exception {
         ConsoleUtil.warn("The 'rm' command is not yet fully implemented");
         ConsoleUtil.info("This command would remove elements from the model using SPARQL DELETE operations");
         ConsoleUtil.info("");
@@ -44,6 +44,6 @@ public class RmCommand implements Runnable {
         ConsoleUtil.info("");
         ConsoleUtil.info("This requires SPARQL UPDATE support in the MMS API");
 
-        System.exit(1);
+        throw new CommandException("Command not yet implemented", 1);
     }
 }
