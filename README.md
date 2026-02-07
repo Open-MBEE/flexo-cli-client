@@ -13,6 +13,33 @@ A git-style command-line interface for interacting with Flexo MMS Layer 1 Servic
 - **Configuration management**: Simple configuration via `~/.flexo/config`
 - **Local development**: Easy setup with docker-compose
 
+## Quick Start
+
+```bash
+# 1. Start local MMS services
+docker-compose -f docker-compose.local.yml up -d
+
+# 2. Build and initialize
+./gradlew installDist
+./build/install/flexo/bin/flexo init
+
+# This creates:
+#   - Organization: "localorg"
+#   - Repository: "localrepo"
+#   - Branch: "master"
+
+# 3. Configure defaults
+cat >> ~/.flexo/config << EOF
+default.org=localorg
+default.repo=localrepo
+default.branch=master
+EOF
+
+# 4. Start using the CLI
+flexo branch --list
+flexo pull master --output model.ttl
+```
+
 ## Prerequisites
 
 - Java 17 or later
@@ -77,11 +104,11 @@ auth.sshKeyPath=~/.ssh/id_rsa
 # Enable this for local testing with docker-compose setup
 local.mode=true
 local.user=root
-local.jwtSecret=dev-secret-please-change-in-production
+local.jwtSecret=devsecretpleasechangeinproduction1234567890
 
-# Default context
-default.org=example-org
-default.repo=example-repo
+# Default context (matches what 'flexo init' creates)
+default.org=localorg
+default.repo=localrepo
 default.branch=master
 
 # RDF format (turtle, jsonld, rdfxml, ntriples)
@@ -95,8 +122,8 @@ You can also override configuration with environment variables:
 
 ```bash
 export FLEXO_MMS_URL=http://localhost:8080
-export FLEXO_DEFAULT_ORG=my-org
-export FLEXO_DEFAULT_REPO=my-repo
+export FLEXO_DEFAULT_ORG=localorg
+export FLEXO_DEFAULT_REPO=localrepo
 ```
 
 ## Local Development Setup
@@ -147,6 +174,35 @@ EOF
 
 ## Usage
 
+### Two Ways to Use Flexo CLI
+
+**Option 1: Using Config Defaults (Recommended)**
+
+Set up your defaults once:
+```bash
+echo "default.org=localorg" >> ~/.flexo/config
+echo "default.repo=localrepo" >> ~/.flexo/config
+echo "default.branch=master" >> ~/.flexo/config
+```
+
+Then use short commands:
+```bash
+flexo branch --list
+flexo pull master --output model.ttl
+flexo push master --message "Update" --input model.ttl
+```
+
+**Option 2: Explicit Context**
+
+Specify org/repo for each command:
+```bash
+flexo --org myorg --repo myrepo branch --list
+flexo --org myorg --repo myrepo pull master --output model.ttl
+flexo --org myorg --repo myrepo push master --message "Update" --input model.ttl
+```
+
+💡 **Tip**: Use config defaults for day-to-day work, explicit context when working with multiple projects.
+
 ### Init Command
 
 Initialize a local Flexo MMS instance with a default organization and repository. This command automates the complete setup process for local development.
@@ -162,7 +218,7 @@ Initialize a local Flexo MMS instance with a default organization and repository
 # Initialize with defaults (org: localorg, repo: localrepo)
 flexo init
 
-# Initialize with custom org/repo
+# Initialize with custom org/repo (for your own projects)
 flexo --org myorg --repo myrepo init
 
 # Force re-initialization if resources already exist
@@ -172,14 +228,17 @@ flexo init --force
 After initialization, you can immediately use the CLI:
 
 ```bash
-# List branches
+# List branches (using defaults from init)
+flexo branch --list
+
+# Or explicitly specify org/repo
 flexo --org localorg --repo localrepo branch --list
 
 # Set defaults in config for convenience
 echo "default.org=localorg" >> ~/.flexo/config
 echo "default.repo=localrepo" >> ~/.flexo/config
 
-# Now you can omit --org and --repo
+# Now you can omit --org and --repo in all commands
 flexo branch --list
 ```
 
@@ -264,16 +323,16 @@ remote.production.localMode=false
 List, create, or manage branches.
 
 ```bash
-# List all branches
+# List all branches (uses defaults from config)
 flexo branch --list
 
 # Create a new branch
-flexo branch --create my-feature
+flexo branch --create feature-xyz
 
 # Create a branch from specific commit
-flexo branch --create my-feature --from <commit-id>
+flexo branch --create feature-xyz --from <commit-id>
 
-# With context options
+# With explicit context (when not using config defaults)
 flexo --org myorg --repo myrepo branch --list
 ```
 
@@ -369,6 +428,10 @@ flexo merge feature
 flexo remote add local http://localhost:8080 --local-mode true --set-default
 flexo remote add production https://mms.example.com --ssh-key ~/.ssh/id_rsa
 
+# Set default context for local development
+echo "default.org=localorg" >> ~/.flexo/config
+echo "default.repo=localrepo" >> ~/.flexo/config
+
 # List remotes
 flexo remote list
 
@@ -386,10 +449,17 @@ flexo --remote production pull master --output prod-master.ttl
 ### Example 2: Create a new branch and push changes
 
 ```bash
+# Using default org/repo from config (localorg/localrepo)
 # Create a branch
-flexo --org myorg --repo myrepo branch --create feature-xyz
+flexo branch --create feature-xyz
 
 # Push some RDF data
+flexo push feature-xyz \
+  --message "Initial commit" \
+  --input my-model.ttl
+
+# Or specify custom org/repo explicitly
+flexo --org myorg --repo myrepo branch --create feature-xyz
 flexo --org myorg --repo myrepo push feature-xyz \
   --message "Initial commit" \
   --input my-model.ttl
@@ -426,17 +496,29 @@ flexo merge feature --target master --no-commit
 # 1. Start Docker services
 docker-compose -f docker-compose.local.yml up -d
 
-# 2. Initialize MMS
+# 2. Build and initialize MMS
 cd flexo-cli-client
 ./gradlew installDist
 ./build/install/flexo/bin/flexo init
 
-# 3. Configure defaults
-echo "default.org=localorg" >> ~/.flexo/config
-echo "default.repo=localrepo" >> ~/.flexo/config
+# This creates:
+#   - Organization: localorg
+#   - Repository: localrepo
+#   - Branch: master
 
-# 4. Use the CLI
+# 3. Configure defaults for convenience
+cat >> ~/.flexo/config << EOF
+default.org=localorg
+default.repo=localrepo
+default.branch=master
+EOF
+
+# 4. Verify setup
 flexo branch --list
+# Output: Branch    Commit    ETag
+#         master    ...       ...
+
+# 5. Work with the CLI
 flexo pull master --output model.ttl
 # Edit model.ttl...
 flexo push master --message "My changes" --input model.ttl
@@ -494,13 +576,13 @@ cp build/libs/flexo-cli-sysmlv2-plugin-1.0.0.jar ~/.flexo/plugins/
 flexo sysml project list
 
 # Get project details
-flexo sysml project get --project PROJECT_ID
+flexo sysml project get --project myproject
 
 # List elements
-flexo sysml element list --project PROJECT_ID --commit COMMIT_ID
+flexo sysml element list --project myproject --commit abc123
 
 # Query relationships
-flexo sysml relationship list --project PROJECT_ID --commit COMMIT_ID ELEMENT_ID
+flexo sysml relationship list --project myproject --commit abc123 element-id
 ```
 
 See the [SysML v2 Plugin README](../flexo-cli-sysmlv2-plugin/README.md) for complete documentation.
@@ -610,8 +692,9 @@ flexo -v push --input your-file.ttl --message "test"
 # List available branches
 flexo branch --list
 
-# Make sure org and repo are correct
-flexo --org yourorg --repo yourrepo branch --list
+# Make sure you're using the correct org and repo
+# If using defaults, check your config:
+cat ~/.flexo/config | grep default
 
 # If no branches exist, you may need to re-initialize
 flexo init
