@@ -5,7 +5,8 @@ A git-style command-line interface for interacting with Flexo MMS Layer 1 Servic
 ## Features
 
 - **Automated initialization**: One-command setup of local MMS instances
-- **Git-style commands**: `init`, `push`, `pull`, `branch`, `merge`, `rm`
+- **Git-style commands**: `init`, `push`, `pull`, `branch`, `merge`, `rm`, `remote`
+- **Multiple remote origins**: Manage and work with multiple MMS servers
 - **RDF support**: Works with Turtle, JSON-LD, RDF/XML, N-Triples formats
 - **Local mode authentication**: Automatic authentication for local development
 - **SSH key authentication**: Supports SSH key-based JWT authentication for production
@@ -195,11 +196,67 @@ flexo [OPTIONS] COMMAND [ARGS...]
 Options:
   --org <org-id>        Organization ID
   --repo <repo-id>      Repository ID
+  --remote <name>       Remote name (default: origin)
   -v, --verbose         Verbose output
   --no-color            Disable colored output
   -c, --config <file>   Configuration file path
   -h, --help            Show help message
   --version             Show version
+```
+
+### Remote Command
+
+Manage multiple remote MMS instances, similar to git remotes.
+
+```bash
+# List all configured remotes
+flexo remote
+flexo remote list
+
+# Add a new remote
+flexo remote add <name> <url>
+
+# Add a remote with local mode enabled
+flexo remote add local http://localhost:8080 --local-mode true --local-user root
+
+# Add a remote with SSH authentication
+flexo remote add production https://mms.example.com --ssh-key ~/.ssh/id_rsa
+
+# Set as default remote
+flexo remote add staging https://staging.example.com --set-default
+
+# Show remote details
+flexo remote show <name>
+
+# Update remote URL
+flexo remote set-url <name> <new-url>
+
+# Rename a remote
+flexo remote rename <old-name> <new-name>
+
+# Remove a remote
+flexo remote remove <name>
+```
+
+**Remote Configuration:**
+
+Remotes are stored in `~/.flexo/config` with the following format:
+
+```properties
+# Default remote
+default.remote=origin
+
+# Remote: origin
+remote.origin.url=http://localhost:8080
+remote.origin.localMode=true
+remote.origin.localUser=root
+remote.origin.localJwtSecret=dev-secret
+
+# Remote: production
+remote.production.url=https://mms.example.com
+remote.production.authEnabled=true
+remote.production.sshKeyPath=~/.ssh/id_rsa
+remote.production.localMode=false
 ```
 
 ### Branch Command
@@ -234,6 +291,9 @@ flexo pull --branch master
 # Pull to file
 flexo pull --branch master --output model.ttl
 
+# Pull from a specific remote
+flexo --remote production pull master
+
 # Pull in JSON-LD format
 flexo pull --format jsonld --output model.jsonld
 
@@ -254,6 +314,9 @@ cat model.ttl | flexo push --message "Update model"
 
 # Push to specific branch
 flexo push --branch feature --message "New feature" --input changes.ttl
+
+# Push to a specific remote
+flexo --remote staging push master --message "Deploy to staging" --input model.ttl
 
 # Push in different format
 flexo push --format jsonld --message "Update" --input model.jsonld
@@ -299,7 +362,28 @@ flexo merge feature
 
 ## Examples
 
-### Example 1: Create a new branch and push changes
+### Example 1: Working with multiple remotes
+
+```bash
+# Add local and production remotes
+flexo remote add local http://localhost:8080 --local-mode true --set-default
+flexo remote add production https://mms.example.com --ssh-key ~/.ssh/id_rsa
+
+# List remotes
+flexo remote list
+
+# Pull from local (default)
+flexo pull master --output model.ttl
+
+# Push to production
+flexo --remote production push master --message "Deploy to prod" --input model.ttl
+
+# Compare branches across remotes
+flexo --remote local pull master --output local-master.ttl
+flexo --remote production pull master --output prod-master.ttl
+```
+
+### Example 2: Create a new branch and push changes
 
 ```bash
 # Create a branch
@@ -311,7 +395,7 @@ flexo --org myorg --repo myrepo push feature-xyz \
   --input my-model.ttl
 ```
 
-### Example 2: Pull, modify, and push
+### Example 3: Pull, modify, and push
 
 ```bash
 # Pull current state
@@ -326,7 +410,7 @@ flexo push master \
   --input current.ttl
 ```
 
-### Example 3: Merge feature branch
+### Example 4: Merge feature branch
 
 ```bash
 # Create diff between branches
@@ -336,7 +420,7 @@ flexo merge feature --target master --no-commit
 # (manual merge workflow)
 ```
 
-### Example 4: Complete workflow from scratch
+### Example 5: Complete workflow from scratch
 
 ```bash
 # 1. Start Docker services

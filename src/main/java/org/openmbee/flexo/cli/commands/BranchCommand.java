@@ -5,6 +5,7 @@ import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Branch;
+import org.openmbee.flexo.cli.model.Remote;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -59,16 +60,45 @@ public class BranchCommand implements Runnable {
             System.exit(1);
         }
 
+        // Get remote configuration
+        String remoteName = parent.getRemoteName() != null ? parent.getRemoteName() : config.getDefaultRemote();
+        Remote remote = config.getRemote(remoteName);
+        
+        // Fall back to legacy configuration if no remote found
+        String mmsUrl;
+        boolean authEnabled;
+        String sshKeyPath;
+        boolean localMode;
+        String localUser;
+        String localJwtSecret;
+        
+        if (remote != null) {
+            mmsUrl = remote.getUrl();
+            authEnabled = remote.isAuthEnabledBoolean();
+            sshKeyPath = remote.getSshKeyPath();
+            localMode = remote.isLocalModeBoolean();
+            localUser = remote.getLocalUser() != null ? remote.getLocalUser() : config.getLocalUser();
+            localJwtSecret = remote.getLocalJwtSecret() != null ? remote.getLocalJwtSecret() : config.getLocalJwtSecret();
+        } else {
+            // Use legacy configuration
+            mmsUrl = config.getMmsUrl();
+            authEnabled = config.isAuthEnabled();
+            sshKeyPath = config.getSshKeyPath();
+            localMode = config.isLocalMode();
+            localUser = config.getLocalUser();
+            localJwtSecret = config.getLocalJwtSecret();
+        }
+
         // Create authentication handler
         AuthenticationHandler authHandler = new AuthenticationHandler(
-                config.isAuthEnabled(),
-                config.getSshKeyPath(),
-                config.isLocalMode(),
-                config.getLocalUser(),
-                config.getLocalJwtSecret()
+                authEnabled,
+                sshKeyPath,
+                localMode,
+                localUser,
+                localJwtSecret
         );
 
-        try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
+        try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler)) {
             if (create) {
                 createBranch(client, orgId, repoId);
             } else if (delete) {

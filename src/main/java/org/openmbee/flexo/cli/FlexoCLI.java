@@ -30,6 +30,7 @@ import java.util.List;
                 PushCommand.class,
                 RmCommand.class,
                 MergeCommand.class,
+                RemoteCommand.class,
                 CommandLine.HelpCommand.class
         }
 )
@@ -47,6 +48,9 @@ public class FlexoCLI implements Runnable {
 
     @Option(names = {"--repo"}, description = "Repository ID", scope = CommandLine.ScopeType.INHERIT)
     private String repoId;
+
+    @Option(names = {"--remote"}, description = "Remote name (default: origin)", scope = CommandLine.ScopeType.INHERIT)
+    private String remoteName;
 
     @Option(names = {"--no-color"}, description = "Disable colored output", scope = CommandLine.ScopeType.INHERIT)
     private boolean noColor;
@@ -91,6 +95,7 @@ public class FlexoCLI implements Runnable {
         ConsoleUtil.info("");
         ConsoleUtil.info("Available commands:");
         ConsoleUtil.info("  init    - Initialize local MMS with default org and repo");
+        ConsoleUtil.info("  remote  - Manage remote MMS instances");
         ConsoleUtil.info("  branch  - List, create, or manage branches");
         ConsoleUtil.info("  pull    - Fetch model from a branch");
         ConsoleUtil.info("  push    - Commit model changes to a branch");
@@ -118,5 +123,9 @@ public class FlexoCLI implements Runnable {
 
     public boolean isNoColor() {
         return noColor;
+    }
+
+    public String getRemoteName() {
+        return remoteName;
     }
 }
