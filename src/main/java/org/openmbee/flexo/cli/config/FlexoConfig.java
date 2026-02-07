@@ -163,7 +163,31 @@ public class FlexoConfig {
     }
 
     public String getLocalJwtSecret() {
-        return get("local.jwtSecret", "dev-secret-please-change-in-production");
+        String secret = get("local.jwtSecret");
+        
+        // If no secret is configured, generate and save one
+        if (secret == null || secret.isEmpty()) {
+            secret = generateJwtSecret();
+            set("local.jwtSecret", secret);
+            try {
+                save();
+                logger.info("Generated and saved new JWT secret");
+            } catch (IOException e) {
+                logger.warn("Failed to save generated JWT secret: {}", e.getMessage());
+            }
+        }
+        
+        return secret;
+    }
+    
+    /**
+     * Generate a secure random JWT secret (64 characters, base64-encoded)
+     */
+    private String generateJwtSecret() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] bytes = new byte[48]; // 48 bytes = 64 base64 characters
+        random.nextBytes(bytes);
+        return java.util.Base64.getEncoder().encodeToString(bytes);
     }
 
     // Remote management methods

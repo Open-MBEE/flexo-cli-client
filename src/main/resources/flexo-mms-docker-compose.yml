@@ -49,19 +49,17 @@ networks:
     name: flexo-local-network
     driver: bridge
 
+# This file is automatically managed by the Flexo CLI.
+# 
+# The 'flexo init' command automatically:
+# 1. Extracts this compose file from the CLI JAR
+# 2. Starts Docker services (Fuseki + MMS Layer 1)
+# 3. Initializes the cluster with users and policies
+# 4. Creates the default org, repo, and branch
+#
 # Usage:
-# 1. Start services: docker-compose -f docker-compose.local.yml up -d
-# 2. Initialize cluster:
-#    cd flexo-mms-layer1-service/deploy
-#    npx ts-node src/main.ts http://layer1-service > ../src/test/resources/cluster.trig
-# 3. Load initialization data into Fuseki:
-#    curl -X POST http://localhost:3030/ds/data?default \
-#      -H "Content-Type: application/trig" \
-#      --data-binary @flexo-mms-layer1-service/src/test/resources/cluster.trig
-# 4. Use flexo CLI:
-#    cd flexo-cli-client
-#    ./gradlew installDist
-#    ./build/install/flexo/bin/flexo --help
+#   flexo init                    # Automatic setup (recommended)
+#   flexo init --skip-docker      # Skip Docker startup
 #
 # NOTE: This setup uses a hardcoded 'root' user with full admin privileges.
 # The flexo-cli-client is configured to use local.mode=true by default, which

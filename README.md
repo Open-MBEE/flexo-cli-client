@@ -99,9 +99,9 @@ auth.sshKeyPath=~/.ssh/id_rsa
 
 # Local development mode - uses hardcoded "root" user
 # Enable this for local testing with docker-compose setup
+# NOTE: JWT secrets are auto-generated on first use
 local.mode=true
 local.user=root
-local.jwtSecret=devsecretpleasechangeinproduction1234567890
 
 # Default context (matches what 'flexo init' creates)
 default.org=localorg
@@ -232,7 +232,7 @@ flexo pull master --output model.ttl
 **Troubleshooting:**
 - If Docker services fail to start, check `docker ps` and logs: `docker logs layer1-service`
 - If you already have services running, use `--skip-docker` flag
-- To stop services: `docker-compose -f docker-compose.local.yml down`
+- To stop services: `docker-compose down` (the CLI manages the compose file automatically)
 
 ### Global Options
 
@@ -589,12 +589,13 @@ For local development with the docker-compose setup, the CLI uses **local mode**
 ```properties
 local.mode=true
 local.user=root
-local.jwtSecret=dev-secret-please-change-in-production
+# JWT secrets are auto-generated and saved to ~/.flexo/config on first use
 ```
 
 The local mode:
 - Uses the hardcoded `root` user from `/home/han/IdeaProjects/Open-MBEE/flexo-mms-layer1-service/src/main/resources/cluster.trig`
-- Generates HMAC-based JWT tokens automatically
+- Generates HMAC-based JWT tokens automatically with secure random secrets
+- Auto-generates JWT secrets (64 characters, base64-encoded) on first use
 - Works with locally deployed flexo-mms-layer1-service without additional authentication setup
 - **Should NEVER be used in production environments**
 
@@ -633,8 +634,9 @@ auth.sshKeyPath=~/.ssh/flexo_rsa
 docker --version
 docker ps
 
-# If init fails, try manual Docker startup
-docker-compose -f docker-compose.local.yml up -d
+# If init fails, services are managed automatically by the CLI
+# You can check service status
+docker ps
 
 # Then run init with --skip-docker
 flexo init --skip-docker
@@ -650,8 +652,8 @@ docker logs quad-store-server
 # Check if services are running
 docker ps
 
-# Restart services if needed
-docker-compose -f docker-compose.local.yml restart
+# Restart services if needed (managed by CLI)
+docker restart layer1-service quad-store-server
 
 # Check service logs
 docker logs layer1-service
@@ -666,13 +668,13 @@ For local development, ensure local mode is enabled:
 # Enable local mode (should be default)
 echo "local.mode=true" >> ~/.flexo/config
 echo "local.user=root" >> ~/.flexo/config
-echo "local.jwtSecret=devsecretpleasechangeinproduction1234567890" >> ~/.flexo/config
+# JWT secret is auto-generated on first use - no manual configuration needed
 ```
 
 If you get 401/403 errors, ensure:
 1. The cluster configuration has been loaded into Fuseki (`flexo init` does this)
-2. The JWT secret matches your docker-compose.local.yml configuration
-3. Local mode is enabled in your config
+2. Local mode is enabled in your config
+3. Check the logs with `flexo -v` for authentication details
 
 ### RDF parsing errors
 
