@@ -51,7 +51,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("  1. Generate and load cluster configuration (users, policies)");
         ConsoleUtil.info("  2. Create org: " + orgId);
         ConsoleUtil.info("  3. Create repo: " + repoId);
-        ConsoleUtil.info("  4. Create branch: " + branchId);
+        ConsoleUtil.info("     (master branch is created automatically by the service)");
 
         try {
             // Step 0: Start Docker services
@@ -75,11 +75,8 @@ public class InitCommand implements Runnable {
                 // Step 2: Create organization
                 createOrg(client, orgId);
 
-                // Step 3: Create repository
+                // Step 3: Create repository (master branch is created automatically)
                 createRepo(client, orgId, repoId);
-
-                // Step 4: Create initial branch with empty commit
-                createInitialBranch(client, orgId, repoId, branchId);
 
                 ConsoleUtil.success("Initialization complete!");
 
@@ -458,7 +455,6 @@ public class InitCommand implements Runnable {
 
         config.set("default.org", orgId);
         config.set("default.repo", repoId);
-        config.set("default.branch", "master");
 
         config.save();
 
