@@ -66,7 +66,7 @@ public class PushCommand extends BaseCommand {
         // Determine format
         String rdfFormat = format != null ? format : config.getRdfFormat();
 
-        try (FlexoMmsClient client = createClient(config)) {
+        try (FlexoMmsClient client = createClient(config, true)) {
             // Read input model
             Model model;
             if (inputFile != null && !inputFile.isEmpty()) {

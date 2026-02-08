@@ -86,45 +86,64 @@ public abstract class BaseCommand implements Runnable {
 
     /**
      * Create a FlexoMmsClient with proper authentication configuration.
-     * Resolves remote configuration or falls back to legacy config.
-     * 
+     * Uses local MMS instance by default with no authentication.
+     * Override shouldUseRemoteUrl to true for pull/push commands that need remotes.
+     *
      * @param config The configuration object
      * @return A new FlexoMmsClient instance
      */
     protected FlexoMmsClient createClient(FlexoConfig config) {
-        // Get remote configuration
-        String remoteName = parent.getRemoteName() != null ? 
-            parent.getRemoteName() : config.getDefaultRemote();
-        Remote remote = config.getRemote(remoteName);
-        
-        // Resolve configuration from remote or legacy config
+        return createClient(config, false);
+    }
+
+    /**
+     * Create a FlexoMmsClient with optional remote configuration.
+     *
+     * @param config The configuration object
+     * @param useRemote Whether to use remote configuration (for pull/push)
+     * @return A new FlexoMmsClient instance
+     */
+    protected FlexoMmsClient createClient(FlexoConfig config, boolean useRemote) {
         String mmsUrl;
         boolean authEnabled;
         String sshKeyPath;
         boolean localMode;
         String localUser;
         String localJwtSecret;
-        
-        if (remote != null) {
-            mmsUrl = remote.getUrl();
-            authEnabled = remote.isAuthEnabledBoolean();
-            sshKeyPath = remote.getSshKeyPath();
-            localMode = remote.isLocalModeBoolean();
-            localUser = remote.getLocalUser() != null ? 
-                remote.getLocalUser() : config.getLocalUser();
-            localJwtSecret = remote.getLocalJwtSecret() != null ? 
-                remote.getLocalJwtSecret() : config.getLocalJwtSecret();
+
+        if (useRemote) {
+            String remoteName = parent.getRemoteName() != null ?
+                parent.getRemoteName() : config.getDefaultRemote();
+            Remote remote = config.getRemote(remoteName);
+
+            if (remote != null) {
+                mmsUrl = remote.getUrl();
+                authEnabled = remote.isAuthEnabledBoolean();
+                sshKeyPath = remote.getSshKeyPath();
+                localMode = remote.isLocalModeBoolean();
+                localUser = remote.getLocalUser() != null ?
+                    remote.getLocalUser() : config.getLocalUser();
+                localJwtSecret = remote.getLocalJwtSecret() != null ?
+                    remote.getLocalJwtSecret() : config.getLocalJwtSecret();
+            } else {
+                mmsUrl = config.getMmsUrl();
+                authEnabled = config.isAuthEnabled();
+                sshKeyPath = config.getSshKeyPath();
+                localMode = config.isLocalMode();
+                localUser = config.getLocalUser();
+                localJwtSecret = config.getLocalJwtSecret();
+            }
         } else {
-            // Use legacy configuration
             mmsUrl = config.getMmsUrl();
-            authEnabled = config.isAuthEnabled();
-            sshKeyPath = config.getSshKeyPath();
-            localMode = config.isLocalMode();
-            localUser = config.getLocalUser();
-            localJwtSecret = config.getLocalJwtSecret();
+            String jwtSecret = config.getLocalJwtSecret();
+            boolean hasAuth = jwtSecret != null && !jwtSecret.isEmpty();
+            authEnabled = false;
+            sshKeyPath = null;
+            localMode = hasAuth;
+            localUser = hasAuth ? config.getLocalUser() : null;
+            localJwtSecret = hasAuth ? jwtSecret : null;
         }
 
-        // Create authentication handler
         AuthenticationHandler authHandler = new AuthenticationHandler(
             authEnabled,
             sshKeyPath,
