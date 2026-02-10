@@ -63,7 +63,7 @@ public class PullCommand extends BaseCommand {
         // Determine format
         String rdfFormat = format != null ? format : config.getRdfFormat();
 
-        try (FlexoMmsClient client = createClient(config)) {
+        try (FlexoMmsClient client = createClient(config, true)) {
             ConsoleUtil.info("Pulling from " + orgId + "/" + repoId + "/" + branch + "...");
 
             // Fetch model

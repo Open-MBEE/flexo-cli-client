@@ -134,13 +134,13 @@ class BaseCommandTest {
         mockRemote.setAuthEnabled("true");
         mockRemote.setSshKeyPath("/path/to/key");
         mockRemote.setLocalMode("false");
-        
+
         when(mockParent.getRemoteName()).thenReturn("origin");
         when(mockConfig.getDefaultRemote()).thenReturn("origin");
         when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
-        
-        FlexoMmsClient client = testCommand.createClient(mockConfig);
-        
+
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+
         assertNotNull(client);
         verify(mockConfig).getRemote("origin");
     }
