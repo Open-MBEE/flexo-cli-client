@@ -249,7 +249,7 @@ public class FlexoMmsClient implements AutoCloseable {
         return baseUrl;
     }
 
-    private void addAuthHeader(HttpUriRequestBase request) {
+    public void addAuthHeader(HttpUriRequestBase request) {
         if (authHandler != null && authHandler.isEnabled()) {
             String authHeader = authHandler.getAuthorizationHeader();
             if (authHeader != null) {
