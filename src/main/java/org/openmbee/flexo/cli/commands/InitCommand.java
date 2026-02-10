@@ -407,40 +407,21 @@ public class InitCommand implements Runnable {
     }
 
     private void generateAndLoadClusterConfig(FlexoMmsClient client, String mmsUrl) throws Exception {
-        ConsoleUtil.info("Generating cluster configuration...");
+        ConsoleUtil.info("Loading cluster configuration...");
 
-        String clusterBaseUrl = mmsUrl.contains("localhost") ? "http://layer1-service" : mmsUrl;
-
-        java.io.File deployDir = new java.io.File(System.getProperty("user.dir"), "../flexo-mms-layer1-service/deploy");
-        String deployPath = deployDir.getCanonicalPath();
-
-        if (!new java.io.File(deployPath, "src/main.ts").exists()) {
-            ConsoleUtil.warn("Deploy script not found at: " + deployPath);
-            ConsoleUtil.info("Skipping cluster config generation.");
-            return;
+        java.io.InputStream resourceStream = getClass().getClassLoader()
+                .getResourceAsStream("cluster.trig");
+        if (resourceStream == null) {
+            throw new Exception("cluster.trig not found in classpath");
         }
 
-        ProcessBuilder pb = new ProcessBuilder(
-                "npx", "ts-node", "src/main.ts", clusterBaseUrl
-        );
-        pb.directory(deployDir);
-        pb.environment().put("PATH", System.getenv("PATH"));
-        pb.redirectErrorStream(true);
-
-        Process process = pb.start();
         StringBuilder trigContent = new StringBuilder();
-
         try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(process.getInputStream()))) {
+                new java.io.InputStreamReader(resourceStream))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 trigContent.append(line).append("\n");
             }
-        }
-
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new Exception("Failed to generate cluster.trig: process exited with code " + exitCode);
         }
 
         ConsoleUtil.success("  Cluster configuration generated");
