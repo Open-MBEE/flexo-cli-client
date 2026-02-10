@@ -105,8 +105,7 @@ public class InitCommand implements Runnable {
 
     private void startDockerServices() throws Exception {
         ConsoleUtil.info("Starting Docker services...");
-        
-        // Extract docker-compose file from classpath to temporary location
+
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
             throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
@@ -115,39 +114,53 @@ public class InitCommand implements Runnable {
 
         ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
 
-        // Check if Docker is available
         if (!isDockerAvailable()) {
             throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
         }
 
-        // Start services using docker-compose
-        ProcessBuilder pb = new ProcessBuilder(
-                "docker-compose", "-f", composeFile.getAbsolutePath(), "up", "-d"
-        );
-        pb.redirectErrorStream(true);
+        boolean success = runDockerCompose(composeFile);
 
-        Process process = pb.start();
-
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  " + line);
-                }
-            }
-        }
-
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new Exception("Failed to start Docker services: docker-compose exited with code " + exitCode);
+        if (!success) {
+            throw new Exception("Failed to start Docker services. Please check Docker logs:\n" +
+                    "  docker compose logs\n" +
+                    "  or: docker-compose logs");
         }
 
         ConsoleUtil.success("  Docker services started");
         ConsoleUtil.info("  Waiting for services to be ready...");
 
-        // Wait for services to be healthy
         waitForServices();
+    }
+
+    private boolean runDockerCompose(java.io.File composeFile) throws Exception {
+        String[] commands = new String[]{"docker compose", "docker-compose"};
+
+        for (String command : commands) {
+            String[] cmdParts = command.split(" ");
+            ProcessBuilder pb = new ProcessBuilder(
+                    cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d"
+            );
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (parent.isVerbose()) {
+                        ConsoleUtil.debug("  " + line);
+                    }
+                }
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private java.io.File extractDockerComposeFromClasspath() throws Exception {
