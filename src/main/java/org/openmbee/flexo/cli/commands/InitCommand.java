@@ -409,14 +409,22 @@ public class InitCommand implements Runnable {
     private void generateAndLoadClusterConfig(FlexoMmsClient client, String mmsUrl) throws Exception {
         ConsoleUtil.info("Generating cluster configuration...");
 
-        // For local docker deployments, use internal service name
         String clusterBaseUrl = mmsUrl.contains("localhost") ? "http://layer1-service" : mmsUrl;
 
-        // Generate cluster.trig using TypeScript deploy script
+        java.io.File deployDir = new java.io.File(System.getProperty("user.dir"), "../flexo-mms-layer1-service/deploy");
+        String deployPath = deployDir.getCanonicalPath();
+
+        if (!new java.io.File(deployPath, "src/main.ts").exists()) {
+            ConsoleUtil.warn("Deploy script not found at: " + deployPath);
+            ConsoleUtil.info("Skipping cluster config generation.");
+            return;
+        }
+
         ProcessBuilder pb = new ProcessBuilder(
                 "npx", "ts-node", "src/main.ts", clusterBaseUrl
         );
-        pb.directory(new java.io.File("../flexo-mms-layer1-service/deploy"));
+        pb.directory(deployDir);
+        pb.environment().put("PATH", System.getenv("PATH"));
         pb.redirectErrorStream(true);
 
         Process process = pb.start();
