@@ -139,11 +139,11 @@ public class FlexoConfig {
     }
 
     public String getDefaultOrg() {
-        return get("default.org");
+        return get("default.org", "");
     }
 
     public String getDefaultRepo() {
-        return get("default.repo");
+        return get("default.repo", "");
     }
 
     public String getDefaultBranch() {
