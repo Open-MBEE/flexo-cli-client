@@ -32,9 +32,16 @@ jobs:
     executor: java-executor
     steps:
       - checkout
+      - setup_remote_docker:
+          version: 20.10.14
       - run:
           name: Login to Dockerhub
-          command: echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+          command: |
+            if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+              echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+            else
+              echo "DOCKER_USERNAME or DOCKER_PASSWORD not set, using CircleCI credentials"
+            fi
       - restore_cache:
           keys:
             - v1-gradle-{{ checksum "build.gradle" }}
