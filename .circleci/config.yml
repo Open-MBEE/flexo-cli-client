@@ -78,10 +78,10 @@ jobs:
     executor: docker-executor
     steps:
       - checkout
-      - run:
-          command: ls -al .
       - attach_workspace:
           at: /home/circleci/flexo-cli-client
+      - run:
+          command: ls -al .
       - sonarcloud/scan
 
   build-dist:
