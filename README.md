@@ -1,4 +1,6 @@
 # Flexo CLI Client
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Open-MBEE_flexo-cli-client&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Open-MBEE_flexo-cli-client)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/Open-MBEE/flexo-cli-client/tree/develop.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/Open-MBEE/flexo-cli-client/tree/develop)
 
 A git-style command-line interface for interacting with Flexo MMS Layer 1 Service.
 
