@@ -39,10 +39,10 @@ jobs:
             - v1-gradle-
       - run:
           name: Build
-          command: ./gradlew build
+          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew build
       - run:
           name: Run Tests
-          command: ./gradlew test
+          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew test
       - save_cache:
           key: v1-gradle-{{ checksum "build.gradle" }}
           paths:
@@ -64,7 +64,7 @@ jobs:
             - v1-gradle-deps-
       - run:
           name: Run OWASP Dependency Check
-          command: ./gradlew dependencyCheckAnalyze
+          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew dependencyCheckAnalyze
       - save_cache:
           key: v1-gradle-deps-{{ checksum "build.gradle" }}
           paths:
@@ -83,7 +83,7 @@ jobs:
             - v1-gradle-dist-
       - run:
           name: Build Distribution
-          command: ./gradlew installDist
+          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew installDist
       - save_cache:
           key: v1-gradle-dist-{{ checksum "build.gradle" }}
           paths:
@@ -102,7 +102,7 @@ jobs:
             - v1-gradle-release-
       - run:
           name: Build Distribution
-          command: ./gradlew installDist fatJar
+          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew installDist fatJar
       - save_cache:
           key: v1-gradle-release-{{ checksum "build.gradle" }}
           paths:
