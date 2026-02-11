@@ -57,7 +57,7 @@ public abstract class BaseCommand implements Runnable {
      * @return The resolved org ID
      */
     protected String getOrgId(FlexoConfig config) {
-        return parent.getOrgId() != null ? parent.getOrgId() : config.getDefaultOrg();
+        return parent != null && parent.getOrgId() != null ? parent.getOrgId() : config.getDefaultOrg();
     }
 
     /**
@@ -66,7 +66,7 @@ public abstract class BaseCommand implements Runnable {
      * @return The resolved repo ID
      */
     protected String getRepoId(FlexoConfig config) {
-        return parent.getRepoId() != null ? parent.getRepoId() : config.getDefaultRepo();
+        return parent != null && parent.getRepoId() != null ? parent.getRepoId() : config.getDefaultRepo();
     }
 
     /**
@@ -112,7 +112,7 @@ public abstract class BaseCommand implements Runnable {
         String localJwtSecret;
 
         if (useRemote) {
-            String remoteName = parent.getRemoteName() != null ?
+            String remoteName = parent != null && parent.getRemoteName() != null ?
                 parent.getRemoteName() : config.getDefaultRemote();
             Remote remote = config.getRemote(remoteName);
 
@@ -160,18 +160,18 @@ public abstract class BaseCommand implements Runnable {
      * Logs verbose output if enabled.
      */
     protected void handleError(Exception e) {
-        String message = e instanceof CommandException ? 
+        String message = e instanceof CommandException ?
             e.getMessage() : "Operation failed: " + e.getMessage();
-        
+
         ConsoleUtil.error(message);
-        
-        if (parent.isVerbose()) {
+
+        if (parent != null && parent.isVerbose()) {
             e.printStackTrace();
         }
 
-        int exitCode = e instanceof CommandException ? 
+        int exitCode = e instanceof CommandException ?
             ((CommandException) e).getExitCode() : 1;
-        
+
         throw new CommandException(message, e, exitCode);
     }
 
