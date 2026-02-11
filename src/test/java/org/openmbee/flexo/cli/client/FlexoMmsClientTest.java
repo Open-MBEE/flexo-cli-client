@@ -125,7 +125,7 @@ class FlexoMmsClientTest {
 
         FlexoMmsClient client = createClientWithMockedHttp();
 
-        Branch branch = client.getBranch("org1", "repo1", "develop");
+        client.getBranch("org1", "repo1", "develop");
 
         // Branch might be null if parsing returns empty list
         // The test verifies the method completes without exception
@@ -155,7 +155,7 @@ class FlexoMmsClientTest {
 
         FlexoMmsClient client = createClientWithMockedHttp();
 
-        Branch branch = client.createBranch("org1", "repo1", "feature", null);
+        client.createBranch("org1", "repo1", "feature", null);
 
         // Verify PUT was executed twice (create + get)
         verify(mockHttpClient, atLeastOnce()).execute(any(HttpUriRequestBase.class));

@@ -213,18 +213,16 @@ public class InitCommand implements Runnable {
         // Wait for Fuseki (port 3030) and MMS (port 8080) to be available
         int maxAttempts = 30;
         int attempt = 0;
-        
+
         while (attempt < maxAttempts) {
             try {
-                // Check Fuseki
-                java.net.Socket fusekiSocket = new java.net.Socket();
-                fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
-                fusekiSocket.close();
+                try (java.net.Socket fusekiSocket = new java.net.Socket()) {
+                    fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
+                }
 
-                // Check MMS
-                java.net.Socket mmsSocket = new java.net.Socket();
-                mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
-                mmsSocket.close();
+                try (java.net.Socket mmsSocket = new java.net.Socket()) {
+                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
+                }
 
                 // Both services are up
                 ConsoleUtil.success("  Services are ready");
