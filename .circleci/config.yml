@@ -81,8 +81,6 @@ jobs:
           method: full
       - attach_workspace:
           at: /home/circleci/
-      - run:
-          command: ls -al .
       - sonarcloud/scan
 
   build-dist:
