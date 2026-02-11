@@ -15,17 +15,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FlexoConfigTest {
 
-    private Map<String, String> originalEnv;
-
     @BeforeEach
     void setUp() {
-        // Store original environment variables
-        originalEnv = new HashMap<>(System.getenv());
     }
 
     @AfterEach
     void tearDown() {
-        // Note: Cannot fully restore environment in Java, but tests are isolated
     }
 
     @Test
