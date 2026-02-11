@@ -7,7 +7,7 @@ executors:
   java-executor:
     docker:
       - image: cimg/openjdk:21.0.4
-    working_directory: ~/project
+    working_directory: /home/circleci/flexo-cli-client
 
   docker-executor:
     docker:
