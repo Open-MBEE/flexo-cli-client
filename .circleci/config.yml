@@ -6,19 +6,24 @@ executors:
       - image: cimg/openjdk:21.0.4
     working_directory: ~/project
 
+  docker-executor:
+    docker:
+      - image: cimg/base:stable
+    working_directory: /home/circleci/flexo-cli-client
+
 workflows:
   version: 2
   build-and-test:
     jobs:
       - build
-      - dependency-check:
-          requires:
-            - build
-          context:
-            - NVD API Key
       - build-dist:
           requires:
             - build
+      - scan:
+          requires:
+            - build
+          context:
+            - SonarCloud
 
   release:
     jobs:
@@ -59,24 +64,13 @@ jobs:
           path: build/
           destination: build
 
-  dependency-check:
-    executor: java-executor
+  scan:
+    executor: docker-executor
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - v1-gradle-deps-{{ checksum "build.gradle" }}
-            - v1-gradle-deps-
-      - run:
-          name: Run OWASP Dependency Check
-          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew dependencyCheckAnalyze
-      - save_cache:
-          key: v1-gradle-deps-{{ checksum "build.gradle" }}
-          paths:
-            - ~/.gradle/caches
-      - store_artifacts:
-          path: build/reports/dependency-check-report.html
-          destination: security-report
+      - attach_workspace:
+          at: /home/circleci/flexo-cli-client
+      - sonarcloud/scan
 
   build-dist:
     executor: java-executor
