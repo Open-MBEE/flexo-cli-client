@@ -15,6 +15,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FlexoConfigTest {
 
+    /*
+     * These lifecycle methods are intentionally empty because:
+     * - System.getenv() cannot be modified or reset in Java, so storing the original
+     *   environment doesn't help with isolation between tests
+     * - FlexoConfig instances are independent and don't share mutable state
+     * - Each test creates fresh FlexoConfig instances that load from defaults/files
+     * - Test isolation is achieved through fresh config objects per test, not through
+     *   environment restoration which is not possible in Java
+     */
+
     @BeforeEach
     void setUp() {
     }
