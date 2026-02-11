@@ -79,7 +79,7 @@ jobs:
     steps:
       - checkout
       - attach_workspace:
-          at: /home/circleci/flexo-cli-client
+          at: /home/circleci/
       - run:
           command: ls -al .
       - sonarcloud/scan
