@@ -32,6 +32,9 @@ jobs:
     executor: java-executor
     steps:
       - checkout
+      - run:
+          name: Login to Dockerhub
+          command: echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
       - restore_cache:
           keys:
             - v1-gradle-{{ checksum "build.gradle" }}
