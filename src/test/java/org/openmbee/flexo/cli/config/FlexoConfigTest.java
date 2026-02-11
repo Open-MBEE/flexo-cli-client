@@ -27,10 +27,17 @@ class FlexoConfigTest {
 
     @BeforeEach
     void setUp() {
+        // Lifecycle methods are intentionally empty.
+        // System.getenv() cannot be modified or reset in Java, so storing the original
+        // environment doesn't help with isolation between tests. Each test creates fresh
+        // FlexoConfig instances that load from defaults/files independently.
     }
 
     @AfterEach
     void tearDown() {
+        // Lifecycle methods are intentionally empty.
+        // Test isolation is achieved through fresh FlexoConfig objects per test,
+        // not through environment restoration which is not possible in Java.
     }
 
     @Test
