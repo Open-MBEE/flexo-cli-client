@@ -52,10 +52,14 @@ jobs:
             - v1-gradle-
       - run:
           name: Build
-          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew build
+          command: ./gradlew build
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       - run:
           name: Run Tests
-          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew test
+          command: ./gradlew test
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       - save_cache:
           key: v1-gradle-{{ checksum "build.gradle" }}
           paths:
@@ -88,7 +92,9 @@ jobs:
             - v1-gradle-dist-
       - run:
           name: Build Distribution
-          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew installDist
+          command: ./gradlew installDist
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       - save_cache:
           key: v1-gradle-dist-{{ checksum "build.gradle" }}
           paths:
@@ -96,6 +102,7 @@ jobs:
       - store_artifacts:
           path: build/install/
           destination: distribution
+
 
   release:
     executor: java-executor
@@ -107,7 +114,9 @@ jobs:
             - v1-gradle-release-
       - run:
           name: Build Distribution
-          command: export GRADLE_OPTS="--enable-native-access=ALL-UNNAMED" && ./gradlew installDist fatJar
+          command: ./gradlew installDist fatJar
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
       - save_cache:
           key: v1-gradle-release-{{ checksum "build.gradle" }}
           paths:
