@@ -79,7 +79,7 @@ tasks.register('fatJar', Jar) {
 // OWASP Dependency Check configuration
 dependencyCheck {
     // NVD API Key for improved download speed and rate limiting
-    apiKey = System.getenv('NVD_API_KEY') ?: ''
+    nvdApiKey = System.getenv('NVD_API_KEY') ?: ''
 
     // Fail build on CVSS score >= 7.0 (High severity)
     failBuildOnCVSS = 7.0
