@@ -33,6 +33,9 @@ jobs:
     steps:
       - checkout
       - setup_remote_docker
+      - run:
+          name: Clear Gradle Cache
+          command: rm -rf ~/.gradle/caches/8.5
       - restore_cache:
           keys:
             - v1-gradle-{{ checksum "build.gradle" }}
