@@ -14,6 +14,8 @@ workflows:
       - dependency-check:
           requires:
             - build
+          context:
+            - NVD API Key
       - build-dist:
           requires:
             - build
