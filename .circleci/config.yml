@@ -1,0 +1,138 @@
+version: 2.1
+
+orbs:
+  sonarcloud: sonarsource/sonarcloud@2.0.0
+
+executors:
+  java-executor:
+    docker:
+      - image: cimg/openjdk:21.0.4
+    working_directory: /home/circleci/flexo-cli-client
+
+  docker-executor:
+    docker:
+      - image: cimg/base:stable
+    working_directory: /home/circleci/flexo-cli-client
+
+workflows:
+  version: 2
+  build-and-test:
+    jobs:
+      - build
+      - build-dist:
+          requires:
+            - build
+      - scan:
+          requires:
+            - build
+          context:
+            - SonarCloud
+
+  release:
+    jobs:
+      - release:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
+jobs:
+  build:
+    executor: java-executor
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Clear Gradle Cache
+          command: rm -rf ~/.gradle/caches/8.5
+      - restore_cache:
+          keys:
+            - v1-gradle-{{ checksum "build.gradle" }}
+            - v1-gradle-
+      - run:
+          name: Build
+          command: ./gradlew build
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      - run:
+          name: Run Tests
+          command: ./gradlew test
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      - save_cache:
+          key: v1-gradle-{{ checksum "build.gradle" }}
+          paths:
+            - ~/.gradle/caches
+            - ~/.gradle/wrapper
+      - store_test_results:
+          path: build/test-results/
+      - store_artifacts:
+          path: build/
+          destination: build
+      - persist_to_workspace:
+          root: /home/circleci/
+          paths:
+            - flexo-cli-client/*
+  scan:
+    executor: docker-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /home/circleci/
+      - run:
+          command: ls -al .
+      - sonarcloud/scan
+
+  build-dist:
+    executor: java-executor
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-gradle-dist-{{ checksum "build.gradle" }}
+            - v1-gradle-dist-
+      - run:
+          name: Build Distribution
+          command: ./gradlew installDist
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      - save_cache:
+          key: v1-gradle-dist-{{ checksum "build.gradle" }}
+          paths:
+            - ~/.gradle/caches
+      - store_artifacts:
+          path: build/install/
+          destination: distribution
+
+
+  release:
+    executor: java-executor
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-gradle-release-{{ checksum "build.gradle" }}
+            - v1-gradle-release-
+      - run:
+          name: Build Distribution
+          command: ./gradlew installDist fatJar
+          environment:
+            GRADLE_OPTS: --enable-native-access=ALL-UNNAMED
+      - save_cache:
+          key: v1-gradle-release-{{ checksum "build.gradle" }}
+          paths:
+            - ~/.gradle/caches
+      - run:
+          name: Create GitHub Release
+          command: |
+            if [ -n "$GITHUB_TOKEN" ]; then
+              curl -L https://github.com/softprops/action-gh-release/releases/latest/download/action-gh-release-linux-linux-amd64.tar.gz | tar -xz
+              ./dist/release
+              mv build/libs/*.jar .
+              mv build/install/flexo/bin/flexo .
+              mv build/install/flexo/bin/flexo.bat .
+              ./action-gh-release --files "*.jar,flexo,flexo.bat" --generate-release-notes
+            fi
+          environment:
+            GITHUB_TOKEN: ${GITHUB_TOKEN}
