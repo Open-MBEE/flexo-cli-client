@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build and Test
-    runs-on: ubuntu-latest
+    runs-on: almalinux-9
 
     steps:
       - name: Checkout code
@@ -57,7 +57,7 @@ jobs:
 
   dependency-check:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: almalinux-9
     needs: build
 
     steps:
@@ -92,7 +92,7 @@ jobs:
 
   distribution:
     name: Build Distribution
-    runs-on: ubuntu-latest
+    runs-on: almalinux-9
     needs: build
 
     steps:

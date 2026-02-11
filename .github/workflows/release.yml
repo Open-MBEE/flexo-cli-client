@@ -8,7 +8,7 @@ on:
 jobs:
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: almalinux-9
 
     steps:
       - name: Checkout code
