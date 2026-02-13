@@ -30,6 +30,37 @@ public class InitCommand implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
+    // Helper methods to reduce duplication
+    private void waitForService(String name, int port, String logMessage, String errorMessage) throws Exception {
+        int maxAttempts = 30;
+        int attempt = 0;
+        ConsoleUtil.info("  Waiting for " + logMessage + "...");
+        while (attempt < maxAttempts) {
+            try (java.net.Socket socket = new java.net.Socket()) {
+                socket.connect(new java.net.InetSocketAddress("localhost", port), 1000);
+                ConsoleUtil.success("  " + name + " is ready");
+                return;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    throw new Exception(errorMessage);
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for " + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+    }
+
+    private void throwConfigNotFound(String resource) throws Exception {
+        throw new Exception(resource + " not found in classpath. Please ensure the application is properly packaged.");
+    }
+
+    private void throwServiceNotReady(String service, String logs) throws Exception {
+        throw new Exception(service + " did not become ready within timeout. Please check Docker logs:\n  " + logs);
+    }
+
     @ParentCommand
     private FlexoCLI parent;
 
@@ -382,103 +413,20 @@ public class InitCommand implements Runnable {
     }
 
     private void waitForServices() throws Exception {
-        // Wait for Fuseki (port 3030) first
-        int maxAttempts = 30;
-        int attempt = 0;
-
-        ConsoleUtil.info("  Waiting for Fuseki (quad-store-server)...");
-        while (attempt < maxAttempts) {
-            try {
-                try (java.net.Socket fusekiSocket = new java.net.Socket()) {
-                    fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
-                }
-                ConsoleUtil.success("  Fuseki is ready");
-                break;
-            } catch (Exception e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new Exception("Fuseki did not become ready within timeout. Please check Docker logs:\n" +
-                            "  docker logs quad-store-server");
-                }
-                Thread.sleep(2000);
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for Fuseki... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
-
-        // Now wait for layer1-service (port 8080)
-        attempt = 0;
-        ConsoleUtil.info("  Waiting for layer1-service...");
-        while (attempt < maxAttempts) {
-            try {
-                try (java.net.Socket mmsSocket = new java.net.Socket()) {
-                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
-                }
-                ConsoleUtil.success("  Services are ready");
-                return;
-            } catch (Exception e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new Exception("layer1-service did not become ready within timeout. Please check Docker logs:\n" +
-                            "  docker logs layer1-service");
-                }
-                Thread.sleep(2000);
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
+        waitForService("Fuseki", 3030, "Fuseki (quad-store-server)", 
+            "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
+        waitForService("layer1-service", 8080, "layer1-service", 
+            "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
     }
 
     private void waitForFuseki() throws Exception {
-        int maxAttempts = 30;
-        int attempt = 0;
-
-        while (attempt < maxAttempts) {
-            try {
-                try (java.net.Socket fusekiSocket = new java.net.Socket()) {
-                    fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
-                }
-                ConsoleUtil.success("  Fuseki is ready");
-                return;
-            } catch (Exception e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new Exception("Fuseki did not become ready within timeout. Please check Docker logs:\n" +
-                            "  docker logs quad-store-server");
-                }
-                Thread.sleep(2000);
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for Fuseki... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
+        waitForService("Fuseki", 3030, "Fuseki", 
+            "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
     }
 
     private void waitForLayer1Service() throws Exception {
-        int maxAttempts = 30;
-        int attempt = 0;
-
-        while (attempt < maxAttempts) {
-            try {
-                try (java.net.Socket mmsSocket = new java.net.Socket()) {
-                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
-                }
-                ConsoleUtil.success("  layer1-service is ready");
-                return;
-            } catch (Exception e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new Exception("layer1-service did not become ready within timeout. Please check Docker logs:\n" +
-                            "  docker logs layer1-service");
-                }
-                Thread.sleep(2000);
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
+        waitForService("layer1-service", 8080, "layer1-service", 
+            "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
     }
 
     private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws Exception {
