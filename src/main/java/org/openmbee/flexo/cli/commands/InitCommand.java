@@ -163,7 +163,26 @@ public class InitCommand implements Runnable {
     }
 
     private java.io.File modifyDockerComposeWithJwtSecret(java.io.File originalFile, String jwtSecret) throws Exception {
-        java.io.File tempFile = java.io.File.createTempFile("flexo-mms-docker-compose-", ".yml");
+        java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
+        java.io.File tempFile;
+        if (System.getProperty("os.name").toLowerCase().contains("unix")) {
+            tempFile = java.nio.file.Files.createTempFile(
+                tempDir.toPath(),
+                "flexo-mms-docker-compose-",
+                ".yml",
+                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+                )
+            ).toFile();
+        } else {
+            tempFile = java.nio.file.Files.createTempFile(
+                "flexo-mms-docker-compose-",
+                ".yml"
+            ).toFile();
+            tempFile.setReadable(true, false);
+            tempFile.setWritable(true, true);
+            tempFile.setExecutable(true, false);
+        }
         tempFile.deleteOnExit();
 
         StringBuilder content = new StringBuilder();
@@ -302,8 +321,27 @@ public class InitCommand implements Runnable {
             return null;
         }
 
-        // Create temporary file
-        java.io.File tempFile = java.io.File.createTempFile("flexo-mms-docker-compose-", ".yml");
+        // Create temporary file with secure permissions
+        java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
+        java.io.File tempFile;
+        if (System.getProperty("os.name").toLowerCase().contains("unix")) {
+            tempFile = java.nio.file.Files.createTempFile(
+                tempDir.toPath(),
+                "flexo-mms-docker-compose-",
+                ".yml",
+                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+                )
+            ).toFile();
+        } else {
+            tempFile = java.nio.file.Files.createTempFile(
+                "flexo-mms-docker-compose-",
+                ".yml"
+            ).toFile();
+            tempFile.setReadable(true, false);
+            tempFile.setWritable(true, true);
+            tempFile.setExecutable(true, false);
+        }
         tempFile.deleteOnExit(); // Clean up on JVM exit
 
         // Copy resource to temporary file
