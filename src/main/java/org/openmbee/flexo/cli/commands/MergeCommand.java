@@ -41,12 +41,12 @@ public class MergeCommand extends BaseCommand {
         // Determine source and target branches
         String source = sourceBranch != null ? sourceBranch : sourceBranchParam;
         if (source == null || source.isEmpty()) {
-            throw new CommandException("Source branch is required. Use -s/--source", 1);
+            throw new CommandExecutionException("Source branch is required. Use -s/--source", 1);
         }
 
         String target = targetBranch != null ? targetBranch : config.getDefaultBranch();
         if (target == null || target.isEmpty()) {
-            throw new CommandException(
+            throw new CommandExecutionException(
                 "Target branch is required. Use -t/--target or set default.branch in config", 1);
         }
 

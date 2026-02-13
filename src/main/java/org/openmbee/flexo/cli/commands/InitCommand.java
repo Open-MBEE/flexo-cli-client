@@ -2,6 +2,7 @@ package org.openmbee.flexo.cli.commands;
 
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -10,6 +11,8 @@ import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParentCommand;
@@ -24,6 +27,8 @@ import picocli.CommandLine.ParentCommand;
         mixinStandardHelpOptions = true
 )
 public class InitCommand implements Runnable {
+
+    private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
     @ParentCommand
     private FlexoCLI parent;
@@ -41,7 +46,6 @@ public class InitCommand implements Runnable {
     public void run() {
         FlexoConfig config = FlexoCLI.getConfig();
 
-        // Get org and repo from parent options or use defaults
         String orgId = parent.getOrgId() != null ? parent.getOrgId() : "localorg";
         String repoId = parent.getRepoId() != null ? parent.getRepoId() : "localrepo";
 
@@ -56,14 +60,12 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("     (master branch is created automatically by the service)");
 
         try {
-            // Step 1: Start Docker services
             if (!skipDocker) {
                 startFuseki();
                 loadClusterConfig(config.getMmsUrl());
                 startLayer1Service(config.getMmsUrl());
             }
 
-            // Create authentication handler
             AuthenticationHandler authHandler = new AuthenticationHandler(
                     config.isAuthEnabled(),
                     config.getSshKeyPath(),
@@ -73,20 +75,14 @@ public class InitCommand implements Runnable {
             );
 
             try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
-                // Step 1: Generate and load cluster.trig (already done if skipDocker is false)
                 if (skipDocker) {
                     generateAndLoadClusterConfig(client, config.getMmsUrl());
                 }
 
-                // Step 2: Create organization
                 createOrg(client, orgId);
-
-                // Step 3: Create repository (master branch is created automatically)
                 createRepo(client, orgId, repoId);
 
                 ConsoleUtil.success("Initialization complete!");
-
-                // Update configuration file with defaults
                 updateConfigDefaults(config, orgId, repoId);
 
                 ConsoleUtil.info("");
@@ -100,12 +96,18 @@ public class InitCommand implements Runnable {
                 ConsoleUtil.info("  flexo push master --message \"My changes\" --input model.ttl");
             }
 
+        } catch (DockerException | ConfigurationException | ServiceException e) {
+            ConsoleUtil.error("Initialization failed: " + e.getMessage());
+            if (parent.isVerbose()) {
+                logger.error("Initialization failed", e);
+            }
+            throw new CommandExecutionException("Initialization failed: " + e.getMessage(), e, e.getExitCode());
         } catch (Exception e) {
             ConsoleUtil.error("Initialization failed: " + e.getMessage());
             if (parent.isVerbose()) {
-                e.printStackTrace();
+                logger.error("Initialization failed", e);
             }
-            System.exit(1);
+            throw new CommandExecutionException("Initialization failed: " + e.getMessage(), e, 1);
         }
     }
 
@@ -114,20 +116,20 @@ public class InitCommand implements Runnable {
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
-            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
+            throw new ConfigurationException("flexo-mms-docker-compose.yml not found in classpath. " +
                     "Please ensure the application is properly packaged.");
         }
 
         ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
 
         if (!isDockerAvailable()) {
-            throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
+            throw new DockerException("Docker is not available. Please install Docker and ensure it's running.");
         }
 
         boolean success = runDockerComposeService(composeFile, "quad-store-server");
 
         if (!success) {
-            throw new Exception("Failed to start Fuseki. Please check Docker logs:\n" +
+            throw new DockerException("Failed to start Fuseki. Please check Docker logs:\n" +
                     "  docker logs quad-store-server");
         }
 
@@ -142,14 +144,14 @@ public class InitCommand implements Runnable {
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
-            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
+            throw new ConfigurationException("flexo-mms-docker-compose.yml not found in classpath. " +
                     "Please ensure the application is properly packaged.");
         }
 
         boolean success = runDockerComposeService(composeFile, "layer1-service");
 
         if (!success) {
-            throw new Exception("Failed to start layer1-service. Please check Docker logs:\n" +
+            throw new DockerException("Failed to start layer1-service. Please check Docker logs:\n" +
                     "  docker logs layer1-service");
         }
 

@@ -1,6 +1,7 @@
 package org.openmbee.flexo.cli;
 
 import org.openmbee.flexo.cli.commands.BranchCommand;
+import org.openmbee.flexo.cli.commands.CommandExecutionException;
 import org.openmbee.flexo.cli.commands.InitCommand;
 import org.openmbee.flexo.cli.commands.MergeCommand;
 import org.openmbee.flexo.cli.commands.PullCommand;
@@ -93,8 +94,8 @@ public class FlexoCLI implements Runnable {
         int exitCode;
         try {
             exitCode = commandLine.execute(args);
-        } catch (BaseCommand.CommandException e) {
-            // CommandException already logged error message
+        } catch (CommandExecutionException e) {
+            // CommandExecutionException already logged error message
             exitCode = e.getExitCode();
         } catch (Exception e) {
             ConsoleUtil.error("Unexpected error: " + e.getMessage());

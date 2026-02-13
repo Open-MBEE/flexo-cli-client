@@ -44,6 +44,6 @@ public class RmCommand extends BaseCommand {
         ConsoleUtil.info("");
         ConsoleUtil.info("This requires SPARQL UPDATE support in the MMS API");
 
-        throw new CommandException("Command not yet implemented", 1);
+        throw new CommandExecutionException("Command not yet implemented", 1);
     }
 }

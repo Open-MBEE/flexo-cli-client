@@ -29,8 +29,8 @@ class RmCommandTest {
         RmCommand command = new RmCommand();
 
         // Command should throw CommandException with exit code 1
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> command.run()
         );
 
@@ -47,7 +47,7 @@ class RmCommandTest {
     void testRunShowsUsageExamples() {
         RmCommand command = new RmCommand();
 
-        assertThrows(BaseCommand.CommandException.class, () -> command.run());
+        assertThrows(CommandExecutionException.class, () -> command.run());
 
         String output = outContent.toString();
         assertTrue(output.contains("--iri"));

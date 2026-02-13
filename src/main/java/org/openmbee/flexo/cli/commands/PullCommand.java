@@ -49,7 +49,7 @@ public class PullCommand extends BaseCommand {
         }
 
         if (branch == null || branch.isEmpty()) {
-            throw new CommandException(
+            throw new CommandExecutionException(
                 "Branch name is required. Use -b/--branch or set default.branch in config", 1);
         }
 

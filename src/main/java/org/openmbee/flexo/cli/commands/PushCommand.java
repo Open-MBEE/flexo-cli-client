@@ -52,7 +52,7 @@ public class PushCommand extends BaseCommand {
         }
 
         if (branch == null || branch.isEmpty()) {
-            throw new CommandException(
+            throw new CommandExecutionException(
                 "Branch name is required. Use -b/--branch or set default.branch in config", 1);
         }
 
@@ -80,14 +80,14 @@ public class PushCommand extends BaseCommand {
             }
 
             if (model == null || model.size() == 0) {
-                throw new CommandException("No valid RDF data found in input", 1);
+                throw new CommandExecutionException("No valid RDF data found in input", 1);
             }
 
             ConsoleUtil.info("Parsed model with " + model.size() + " statements");
 
             // Validate model
             if (!RdfParser.validate(model)) {
-                throw new CommandException("Model validation failed", 1);
+                throw new CommandExecutionException("Model validation failed", 1);
             }
 
             ConsoleUtil.info("Pushing to " + orgId + "/" + repoId + "/" + branch + "...");

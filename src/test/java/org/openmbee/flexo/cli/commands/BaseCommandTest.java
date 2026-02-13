@@ -86,8 +86,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_MissingOrg() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo(null, "repo")
         );
         
@@ -97,8 +97,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_EmptyOrg() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("", "repo")
         );
         
@@ -107,8 +107,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_MissingRepo() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("org", null)
         );
         
@@ -118,8 +118,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_EmptyRepo() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("org", "")
         );
         
@@ -165,8 +165,8 @@ class BaseCommandTest {
 
     @Test
     void testCommandException_WithMessage() {
-        BaseCommand.CommandException exception = 
-            new BaseCommand.CommandException("Test error", 2);
+        CommandExecutionException exception = 
+            new CommandExecutionException("Test error", 2);
         
         assertEquals("Test error", exception.getMessage());
         assertEquals(2, exception.getExitCode());
@@ -175,8 +175,8 @@ class BaseCommandTest {
     @Test
     void testCommandException_WithCause() {
         Exception cause = new RuntimeException("Root cause");
-        BaseCommand.CommandException exception = 
-            new BaseCommand.CommandException("Test error", cause, 3);
+        CommandExecutionException exception = 
+            new CommandExecutionException("Test error", cause, 3);
         
         assertEquals("Test error", exception.getMessage());
         assertEquals(cause, exception.getCause());
@@ -285,9 +285,9 @@ class BaseCommandTest {
 
     @Test
     void testHandleError_CommandException() {
-        BaseCommand.CommandException exception = new BaseCommand.CommandException("Test error", 1);
+        CommandExecutionException exception = new CommandExecutionException("Test error", 1);
         
-        assertThrows(BaseCommand.CommandException.class, () -> {
+        assertThrows(CommandExecutionException.class, () -> {
             testCommand.handleError(exception);
         });
     }
@@ -296,7 +296,7 @@ class BaseCommandTest {
     void testHandleError_GenericException() {
         RuntimeException exception = new RuntimeException("Generic error");
         
-        assertThrows(BaseCommand.CommandException.class, () -> {
+        assertThrows(CommandExecutionException.class, () -> {
             testCommand.handleError(exception);
         });
     }
@@ -312,7 +312,7 @@ class BaseCommandTest {
     void testRun_CommandException() {
         testCommand.shouldThrowCommandException = true;
         
-        assertThrows(BaseCommand.CommandException.class, () -> {
+        assertThrows(CommandExecutionException.class, () -> {
             testCommand.run();
         });
     }
@@ -321,7 +321,7 @@ class BaseCommandTest {
     void testRun_GenericException() {
         testCommand.shouldThrowGenericException = true;
         
-        assertThrows(BaseCommand.CommandException.class, () -> {
+        assertThrows(CommandExecutionException.class, () -> {
             testCommand.run();
         });
     }
@@ -347,7 +347,7 @@ class BaseCommandTest {
         @Override
         protected void executeCommand() throws Exception {
             if (shouldThrowCommandException) {
-                throw new CommandException("Command failed", 1);
+                throw new CommandExecutionException("Command failed", 1);
             }
             if (shouldThrowGenericException) {
                 throw new RuntimeException("Generic error");
