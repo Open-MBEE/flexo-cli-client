@@ -221,7 +221,7 @@ public class InitCommand implements Runnable {
     }
 
     private void waitForLayer1ServiceHealth(String mmsUrl) throws Exception {
-        String healthUrl = mmsUrl + "/health";
+        String healthUrl = mmsUrl + "/";
         int maxAttempts = 15;
         int attempt = 0;
 
@@ -232,11 +232,9 @@ public class InitCommand implements Runnable {
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
-                int statusCode = conn.getResponseCode();
-                if (statusCode >= 200 && statusCode < 300) {
-                    ConsoleUtil.success("  layer1-service health check passed");
-                    return;
-                }
+                conn.getResponseCode();
+                ConsoleUtil.success("  layer1-service is ready");
+                return;
             } catch (Exception e) {
             }
 
@@ -244,12 +242,12 @@ public class InitCommand implements Runnable {
             if (attempt < maxAttempts) {
                 Thread.sleep(2000);
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for layer1-service health... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             }
         }
 
-        ConsoleUtil.warn("  layer1-service health check timed out, proceeding anyway...");
+        ConsoleUtil.warn("  layer1-service check timed out, proceeding anyway...");
     }
 
     private void startDockerServices() throws Exception {
@@ -282,13 +280,17 @@ public class InitCommand implements Runnable {
     }
 
     private boolean runDockerCompose(java.io.File composeFile) throws Exception {
-        String[] commands = new String[]{"docker compose", "docker-compose"};
+        String[][] commandVariants = new String[][] {
+            new String[] { "docker", "compose" },
+            new String[] { "docker-compose" }
+        };
 
-        for (String command : commands) {
-            String[] cmdParts = command.split(" ");
-            ProcessBuilder pb = new ProcessBuilder(
-                    cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d"
-            );
+        for (String[] cmdParts : commandVariants) {
+            ProcessBuilder pb = new ProcessBuilder(cmdParts);
+            pb.command().add("-f");
+            pb.command().add(composeFile.getAbsolutePath());
+            pb.command().add("up");
+            pb.command().add("-d");
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
@@ -478,13 +480,18 @@ public class InitCommand implements Runnable {
     }
 
     private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws Exception {
-        String[] commands = new String[]{"docker compose", "docker-compose"};
+        String[][] commandVariants = new String[][] {
+            new String[] { "docker", "compose" },
+            new String[] { "docker-compose" }
+        };
 
-        for (String command : commands) {
-            String[] cmdParts = command.split(" ");
-            ProcessBuilder pb = new ProcessBuilder(
-                    cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d", serviceName
-            );
+        for (String[] cmdParts : commandVariants) {
+            ProcessBuilder pb = new ProcessBuilder(cmdParts);
+            pb.command().add("-f");
+            pb.command().add(composeFile.getAbsolutePath());
+            pb.command().add("up");
+            pb.command().add("-d");
+            pb.command().add(serviceName);
             pb.redirectErrorStream(true);
 
             Process process = pb.start();

@@ -6,7 +6,6 @@ This document provides a complete walkthrough of all flexo-cli-client features.
 
 - **JSON-LD/RDFXML format pull** (`DEMO.md:160,163,449-453`): The layer1-service does not properly honor the Accept header for different RDF formats. Pulling with `--format jsonld` or `--format rdfxml` will fail because the server always returns Turtle format.
 - **Merge/diff operations** (`DEMO.md:248,390-394`): The merge command with `--no-commit` and subsequent diff creation fails with "Not implemented (formulae, graph literals)" due to a TriG parsing issue in the layer1-service.
-- **Health check timeout**: The layer1-service health check may occasionally time out during initialization; operations will proceed anyway.
 
 ## Prerequisites
 
@@ -63,7 +62,7 @@ Starting layer1-service...
   Waiting for layer1-service to be ready...
   layer1-service is ready
   Verifying layer1-service health...
-  Warning: layer1-service health check timed out, proceeding anyway...
+  layer1-service is ready
 Creating organization 'localorg'...
   Organization created
 Creating repository 'localrepo'...
@@ -72,22 +71,6 @@ Initialization complete!
 Configuration updated in ~/.flexo/config with:
   default.org=localorg
   default.repo=localrepo
-```
-
-Note: The health check may timeout during initialization - this is normal and operations will proceed.
-
-### 1.2 Verify Configuration
-
-```bash
-cat ~/.flexo/config
-```
-
-Expected:
-```properties
-# Flexo CLI Configuration
-#Fri Feb 13 06:56:14 PST 2026
-default.org=localorg
-default.repo=localrepo
 ```
 
 Note: Add a local remote manually for remote operations:

@@ -11,6 +11,8 @@ services:
     hostname: quad-store-server
     container_name: quad-store-server
     command: --mem --update /ds
+    environment:
+      - JVM_ARGS=-Xmx512m
     ports:
       - "3030:3030"
     networks:
