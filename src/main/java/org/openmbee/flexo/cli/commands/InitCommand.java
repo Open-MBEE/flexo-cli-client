@@ -56,7 +56,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("     (master branch is created automatically by the service)");
 
         try {
-            // Step 0: Start Docker services
+            // Step 1: Start Docker services
             if (!skipDocker) {
                 startFuseki();
                 loadClusterConfig(config.getMmsUrl());
@@ -140,18 +140,13 @@ public class InitCommand implements Runnable {
     private void startLayer1Service(String mmsUrl) throws Exception {
         ConsoleUtil.info("Starting layer1-service...");
 
-        FlexoConfig config = FlexoCLI.getConfig();
-        String jwtSecret = config.getLocalJwtSecret();
-
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
             throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
                     "Please ensure the application is properly packaged.");
         }
 
-        java.io.File modifiedComposeFile = modifyDockerComposeWithJwtSecret(composeFile, jwtSecret);
-
-        boolean success = runDockerComposeService(modifiedComposeFile, "layer1-service");
+        boolean success = runDockerComposeService(composeFile, "layer1-service");
 
         if (!success) {
             throw new Exception("Failed to start layer1-service. Please check Docker logs:\n" +
@@ -186,6 +181,8 @@ public class InitCommand implements Runnable {
                 }
 
                 if (inLayer1Service && line.trim().startsWith("- JWT_SECRET=")) {
+                    line = "      - JWT_SECRET=" + jwtSecret;
+                } else if (inLayer1Service && line.trim().startsWith("- JWT_SECRET=${")) {
                     line = "      - JWT_SECRET=" + jwtSecret;
                 }
 

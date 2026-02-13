@@ -162,31 +162,12 @@ public class FlexoConfig {
         return get("local.user", "root");
     }
 
-    public String getLocalJwtSecret() {
-        String secret = get("local.jwtSecret");
-
-        if (secret == null || secret.isEmpty()) {
-            secret = "devsecretpleasechangeinproduction1234567890";
-            set("local.jwtSecret", secret);
-            try {
-                save();
-                logger.info("Set default JWT secret in configuration");
-            } catch (IOException e) {
-                logger.warn("Failed to save JWT secret to config: {}", e.getMessage());
-            }
-        }
-
-        return secret;
-    }
-    
     /**
-     * Generate a secure random JWT secret (64 characters, base64-encoded)
+     * Get the hardcoded JWT secret for local development.
+     * This secret is fixed and must match the JWT_SECRET in the layer1-service container.
      */
-    private String generateJwtSecret() {
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        byte[] bytes = new byte[48]; // 48 bytes = 64 base64 characters
-        random.nextBytes(bytes);
-        return java.util.Base64.getEncoder().encodeToString(bytes);
+    public String getLocalJwtSecret() {
+        return "devsecretpleasechangeinproduction1234567890";
     }
 
     // Remote management methods
