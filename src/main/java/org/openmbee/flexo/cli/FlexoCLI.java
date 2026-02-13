@@ -126,6 +126,10 @@ public class FlexoCLI implements Runnable {
         return config;
     }
 
+    public static void setConfig(FlexoConfig testConfig) {
+        config = testConfig;
+    }
+
     public String getOrgId() {
         return orgId;
     }

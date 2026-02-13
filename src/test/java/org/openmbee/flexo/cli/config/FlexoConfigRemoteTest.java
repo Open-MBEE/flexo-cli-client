@@ -24,7 +24,7 @@ class FlexoConfigRemoteTest {
 
     @BeforeEach
     void setUp() {
-        config = new FlexoConfig();
+        config = new FlexoConfig(false);
     }
 
     @Test

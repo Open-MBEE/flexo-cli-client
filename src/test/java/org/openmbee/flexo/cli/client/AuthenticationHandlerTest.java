@@ -185,6 +185,90 @@ class AuthenticationHandlerTest {
         });
     }
 
+    @Test
+    void testLocalModeEnabled() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "testuser", "testsecret123456789012345678901234567890");
+
+        assertTrue(handler.isEnabled());
+        assertNotNull(handler.getToken());
+        assertNotNull(handler.getAuthorizationHeader());
+        assertTrue(handler.getAuthorizationHeader().startsWith("Bearer "));
+    }
+
+    @Test
+    void testLocalModeDefaultUser() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, null, "testsecret123456789012345678901234567890");
+
+        assertTrue(handler.isEnabled());
+        assertNotNull(handler.getToken());
+    }
+
+    @Test
+    void testLocalModeNullSecret() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "testuser", null);
+
+        assertTrue(handler.isEnabled());
+        assertNull(handler.getToken());
+    }
+
+    @Test
+    void testLocalModeEmptySecret() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "testuser", "");
+
+        assertTrue(handler.isEnabled());
+        assertNull(handler.getToken());
+    }
+
+    @Test
+    void testLocalModeShortSecret() {
+        // 32 characters = 256 bits minimum required
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "testuser", "12345678901234567890123456789012");
+
+        assertTrue(handler.isEnabled());
+        assertNotNull(handler.getToken());
+    }
+
+    @Test
+    void testLocalModeGetAuthorizationHeader() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "admin", "testsecret123456789012345678901234567890");
+
+        String authHeader = handler.getAuthorizationHeader();
+        assertNotNull(authHeader);
+        assertTrue(authHeader.startsWith("Bearer "));
+    }
+
+    @Test
+    void testLocalModeTokenCaching() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "user", "testsecret123456789012345678901234567890");
+
+        String token1 = handler.getToken();
+        String token2 = handler.getToken();
+
+        assertNotNull(token1);
+        assertEquals(token1, token2);
+    }
+
+    @Test
+    void testLocalModeClearCache() {
+        AuthenticationHandler handler = new AuthenticationHandler(false, null, true, "user", "testsecret123456789012345678901234567890");
+
+        String token1 = handler.getToken();
+        handler.clearCache();
+        String token2 = handler.getToken();
+
+        assertNotNull(token1);
+        assertNotNull(token2);
+    }
+
+    @Test
+    void testBothEnabledAndLocalMode() {
+        AuthenticationHandler handler = new AuthenticationHandler(true, null, true, "user", "testsecret123456789012345678901234567890");
+
+        assertTrue(handler.isEnabled());
+        // Local mode should take precedence
+        assertNotNull(handler.getToken());
+    }
+
     // Note: Testing actual JWT generation with a real SSH key would require:
     // 1. A valid test RSA key pair
     // 2. Proper PEM formatting

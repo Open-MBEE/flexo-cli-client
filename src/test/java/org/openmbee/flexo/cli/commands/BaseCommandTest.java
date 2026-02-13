@@ -183,6 +183,158 @@ class BaseCommandTest {
         assertEquals(3, exception.getExitCode());
     }
 
+    @Test
+    void testCreateClient_WithoutRemote() {
+        when(mockConfig.getMmsUrl()).thenReturn("http://localhost:8080");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("");
+        when(mockConfig.isLocalMode()).thenReturn(true);
+        when(mockConfig.getLocalUser()).thenReturn("root");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, false);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullRemote() {
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(null);
+        when(mockConfig.getMmsUrl()).thenReturn("http://localhost:8080");
+        when(mockConfig.isAuthEnabled()).thenReturn(false);
+        when(mockConfig.getSshKeyPath()).thenReturn(null);
+        when(mockConfig.isLocalMode()).thenReturn(true);
+        when(mockConfig.getLocalUser()).thenReturn("root");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("secret123456789012345678901234567890");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_LocalMode() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser("remoteuser");
+        mockRemote.setLocalJwtSecret("secret123456789012345678901234567890");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_AuthEnabled() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setAuthEnabled("true");
+        mockRemote.setSshKeyPath("/path/to/key");
+        mockRemote.setLocalMode("false");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullLocalUser() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser(null);
+        mockRemote.setLocalJwtSecret("secret123456789012345678901234567890");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        when(mockConfig.getLocalUser()).thenReturn("defaultuser");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullLocalJwtSecret() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser("user");
+        mockRemote.setLocalJwtSecret(null);
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        when(mockConfig.getLocalUser()).thenReturn("defaultuser");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("defaultsecret123456789012345678901234567890");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testHandleError_CommandException() {
+        BaseCommand.CommandException exception = new BaseCommand.CommandException("Test error", 1);
+        
+        assertThrows(BaseCommand.CommandException.class, () -> {
+            testCommand.handleError(exception);
+        });
+    }
+
+    @Test
+    void testHandleError_GenericException() {
+        RuntimeException exception = new RuntimeException("Generic error");
+        
+        assertThrows(BaseCommand.CommandException.class, () -> {
+            testCommand.handleError(exception);
+        });
+    }
+
+    @Test
+    void testRun_Success() {
+        testCommand.run();
+        
+        assertTrue(testCommand.wasExecuted);
+    }
+
+    @Test
+    void testRun_CommandException() {
+        testCommand.shouldThrowCommandException = true;
+        
+        assertThrows(BaseCommand.CommandException.class, () -> {
+            testCommand.run();
+        });
+    }
+
+    @Test
+    void testRun_GenericException() {
+        testCommand.shouldThrowGenericException = true;
+        
+        assertThrows(BaseCommand.CommandException.class, () -> {
+            testCommand.run();
+        });
+    }
+
+    @Test
+    void testGetConfig() {
+        FlexoCLI.setConfig(new FlexoConfig(false));
+        
+        FlexoConfig config = testCommand.getConfig();
+        
+        assertNotNull(config);
+    }
+
     /**
      * Test implementation of BaseCommand for testing purposes
      */

@@ -32,8 +32,16 @@ public class FlexoConfig {
         loadConfiguration();
     }
 
-    private void loadConfiguration() {
-        // 1. Load default properties from resources
+    public FlexoConfig(boolean loadUserConfig) {
+        this.properties = new Properties();
+        loadDefaultProperties();
+        if (loadUserConfig) {
+            loadUserConfig();
+        }
+        overrideWithEnvironment();
+    }
+
+    private void loadDefaultProperties() {
         try (InputStream defaultStream = getClass().getResourceAsStream(DEFAULT_PROPERTIES)) {
             if (defaultStream != null) {
                 properties.load(defaultStream);
@@ -42,8 +50,9 @@ public class FlexoConfig {
         } catch (IOException e) {
             logger.warn("Could not load default properties: {}", e.getMessage());
         }
+    }
 
-        // 2. Load user config file if it exists
+    private void loadUserConfig() {
         Path userConfigPath = getUserConfigPath();
         if (Files.exists(userConfigPath)) {
             try (InputStream userStream = Files.newInputStream(userConfigPath)) {
@@ -53,8 +62,11 @@ public class FlexoConfig {
                 logger.warn("Could not load user config: {}", e.getMessage());
             }
         }
+    }
 
-        // 3. Override with environment variables
+    private void loadConfiguration() {
+        loadDefaultProperties();
+        loadUserConfig();
         overrideWithEnvironment();
     }
 
