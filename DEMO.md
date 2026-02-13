@@ -2,6 +2,11 @@
 
 This document provides a complete walkthrough of all flexo-cli-client features.
 
+## Known Issues
+
+- **JSON-LD/RDFXML format pull** (`DEMO.md:160,163,439-440`): The layer1-service does not properly honor the Accept header for different RDF formats. Pulling with `--format jsonld` or `--format rdfxml` will fail because the server always returns Turtle format.
+- **Merge/diff operations** (`DEMO.md:248,384`): The merge command with `--no-commit` and subsequent diff creation fails with "Not implemented (formulae, graph literals)" due to a TriG parsing issue in the layer1-service.
+
 ## Prerequisites
 
 ```bash
@@ -42,15 +47,22 @@ This will:
   2. Create org: localorg
   3. Create repo: localrepo
      (master branch is created automatically by the service)
-Starting Docker services...
+Starting Fuseki (quad-store-server)...
   Using docker-compose file: /tmp/...
-  Docker services started
-  Waiting for services to be ready...
-  Services are ready
-Generating cluster configuration...
-  Cluster configuration generated
+  Fuseki started
+  Waiting for Fuseki to be ready...
+  Fuseki is ready
 Loading cluster configuration into Fuseki...
+  Cluster configuration loaded
   Cluster configuration loaded into Fuseki
+  Ensuring Fuseki index is ready...
+  Fuseki index is ready
+Starting layer1-service...
+  layer1-service started
+  Waiting for layer1-service to be ready...
+  layer1-service is ready
+  Verifying layer1-service health...
+  layer1-service health check passed
 Creating organization 'localorg'...
   Organization created
 Creating repository 'localrepo'...
@@ -60,6 +72,8 @@ Configuration updated in ~/.flexo/config with:
   default.org=localorg
   default.repo=localrepo
 ```
+
+Note: The JWT secret in `~/.flexo/config` (`local.jwtSecret`) must match the `JWT_SECRET` environment variable in the layer1-service container. For local development, use the default secret: `devsecretpleasechangeinproduction1234567890`
 
 ### 1.2 Verify Configuration
 
@@ -147,10 +161,10 @@ feature-abc ...       ...
 # Pull to Turtle file (default format)
 ./build/install/flexo/bin/flexo pull --branch master --output model.ttl
 
-# Pull to JSON-LD
+# Pull to JSON-LD [Currently broken - server returns Turtle instead of JSON-LD]
 ./build/install/flexo/bin/flexo pull --branch master --format jsonld --output model.jsonld
 
-# Pull to RDF/XML
+# Pull to RDF/XML [Currently broken - server returns Turtle instead of RDF/XML]
 ./build/install/flexo/bin/flexo pull --branch feature-xyz --format rdfxml --output model.rdf
 
 # Pull from specific remote
@@ -235,7 +249,7 @@ cat /tmp/test-model.ttl | ./build/install/flexo/bin/flexo push --message "Push f
 ### 5.1 View Diff Between Branches
 
 ```bash
-# Create diff without committing
+# Create diff without committing [Currently broken - TriG parsing error]
 ./build/install/flexo/bin/flexo merge --source feature-xyz --target master --no-commit
 
 # Alternative syntax
@@ -247,6 +261,8 @@ Expected output:
 Diff between feature-xyz and master:
 [Diff output from server]
 ```
+
+> **Known Issue**: The merge diff feature currently fails with "Not implemented (formulae, graph literals)" due to TriG parsing in the layer1-service.
 
 ### 5.2 Merge Changes
 
@@ -280,7 +296,7 @@ origin    http://localhost:8080  (local mode: true)
 ```bash
 # Add local remote with local mode
 ./build/install/flexo/bin/flexo remote add local http://localhost:8080 \
-    --local-mode true \
+    --local-mode \
     --local-user root \
     --set-default
 
@@ -371,15 +387,17 @@ EOF
 ### 7.3 Merge Feature into Master
 
 ```bash
-# 1. View diff before merging
+# 1. View diff before merging [Currently broken - TriG parsing error]
 ./build/install/flexo/bin/flexo merge --source feature-login --target master --no-commit
 
-# 2. Merge (if diff looks correct)
+# 2. Merge (if diff looks correct) [Currently broken - TriG parsing error]
 ./build/install/flexo/bin/flexo merge --source feature-login --target master
 
 # 3. Verify master has the changes
 ./build/install/flexo/bin/flexo pull --branch master --output master-updated.ttl
 ```
+
+> **Known Issue**: Merge operations are currently broken due to layer1-service TriG parsing.
 
 ---
 
@@ -425,12 +443,16 @@ export FLEXO_DEFAULT_REPO=localrepo
 ### 9.2 Format Conversion Demo
 
 ```bash
-# Pull in different formats
+# Pull in Turtle format (default and working)
 ./build/install/flexo/bin/flexo pull --branch master --format turtle --output model.ttl
+
+# Pull in JSON-LD format [Currently broken - server returns Turtle]
 ./build/install/flexo/bin/flexo pull --branch master --format jsonld --output model.jsonld
+
+# Pull in RDF/XML format [Currently broken - server returns Turtle]
 ./build/install/flexo/bin/flexo pull --branch master --format rdfxml --output model.rdf
 
-# Push different formats
+# Push different formats (these work as input formats)
 ./build/install/flexo/bin/flexo push --format jsonld \
     --message "Push JSON-LD" \
     --input model.jsonld

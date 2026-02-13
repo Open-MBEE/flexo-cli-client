@@ -1,5 +1,7 @@
 package org.openmbee.flexo.cli.commands;
 
+import java.io.FileReader;
+import java.io.FileWriter;
 import org.apache.hc.client5.http.classic.methods.HttpPut;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -56,7 +58,9 @@ public class InitCommand implements Runnable {
         try {
             // Step 0: Start Docker services
             if (!skipDocker) {
-                startDockerServices();
+                startFuseki();
+                loadClusterConfig(config.getMmsUrl());
+                startLayer1Service(config.getMmsUrl());
             }
 
             // Create authentication handler
@@ -69,8 +73,10 @@ public class InitCommand implements Runnable {
             );
 
             try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
-                // Step 1: Generate and load cluster.trig
-                generateAndLoadClusterConfig(client, config.getMmsUrl());
+                // Step 1: Generate and load cluster.trig (already done if skipDocker is false)
+                if (skipDocker) {
+                    generateAndLoadClusterConfig(client, config.getMmsUrl());
+                }
 
                 // Step 2: Create organization
                 createOrg(client, orgId);
@@ -101,6 +107,133 @@ public class InitCommand implements Runnable {
             }
             System.exit(1);
         }
+    }
+
+    private void startFuseki() throws Exception {
+        ConsoleUtil.info("Starting Fuseki (quad-store-server)...");
+
+        java.io.File composeFile = extractDockerComposeFromClasspath();
+        if (composeFile == null) {
+            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
+                    "Please ensure the application is properly packaged.");
+        }
+
+        ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
+
+        if (!isDockerAvailable()) {
+            throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
+        }
+
+        boolean success = runDockerComposeService(composeFile, "quad-store-server");
+
+        if (!success) {
+            throw new Exception("Failed to start Fuseki. Please check Docker logs:\n" +
+                    "  docker logs quad-store-server");
+        }
+
+        ConsoleUtil.success("  Fuseki started");
+        ConsoleUtil.info("  Waiting for Fuseki to be ready...");
+
+        waitForFuseki();
+    }
+
+    private void startLayer1Service(String mmsUrl) throws Exception {
+        ConsoleUtil.info("Starting layer1-service...");
+
+        FlexoConfig config = FlexoCLI.getConfig();
+        String jwtSecret = config.getLocalJwtSecret();
+
+        java.io.File composeFile = extractDockerComposeFromClasspath();
+        if (composeFile == null) {
+            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
+                    "Please ensure the application is properly packaged.");
+        }
+
+        java.io.File modifiedComposeFile = modifyDockerComposeWithJwtSecret(composeFile, jwtSecret);
+
+        boolean success = runDockerComposeService(modifiedComposeFile, "layer1-service");
+
+        if (!success) {
+            throw new Exception("Failed to start layer1-service. Please check Docker logs:\n" +
+                    "  docker logs layer1-service");
+        }
+
+        ConsoleUtil.success("  layer1-service started");
+        ConsoleUtil.info("  Waiting for layer1-service to be ready...");
+
+        waitForLayer1Service();
+
+        ConsoleUtil.info("  Verifying layer1-service health...");
+        waitForLayer1ServiceHealth(mmsUrl);
+    }
+
+    private java.io.File modifyDockerComposeWithJwtSecret(java.io.File originalFile, String jwtSecret) throws Exception {
+        java.io.File tempFile = java.io.File.createTempFile("flexo-mms-docker-compose-", ".yml");
+        tempFile.deleteOnExit();
+
+        StringBuilder content = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.FileReader(originalFile))) {
+            String line;
+            boolean inLayer1Service = false;
+            int indentLevel = 0;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().startsWith("layer1-service:")) {
+                    inLayer1Service = true;
+                    indentLevel = line.indexOf("layer1-service");
+                } else if (inLayer1Service && !line.trim().isEmpty() && !line.startsWith(" ")) {
+                    inLayer1Service = false;
+                }
+
+                if (inLayer1Service && line.trim().startsWith("- JWT_SECRET=")) {
+                    line = "      - JWT_SECRET=" + jwtSecret;
+                }
+
+                content.append(line).append("\n");
+            }
+        }
+
+        try (java.io.FileWriter writer = new java.io.FileWriter(tempFile)) {
+            writer.write(content.toString());
+        }
+
+        if (parent.isVerbose()) {
+            ConsoleUtil.debug("  Modified docker-compose with JWT secret to: " + tempFile.getAbsolutePath());
+        }
+
+        return tempFile;
+    }
+
+    private void waitForLayer1ServiceHealth(String mmsUrl) throws Exception {
+        String healthUrl = mmsUrl + "/health";
+        int maxAttempts = 15;
+        int attempt = 0;
+
+        while (attempt < maxAttempts) {
+            try {
+                java.net.URL url = new java.net.URL(healthUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                int statusCode = conn.getResponseCode();
+                if (statusCode >= 200 && statusCode < 300) {
+                    ConsoleUtil.success("  layer1-service health check passed");
+                    return;
+                }
+            } catch (Exception e) {
+            }
+
+            attempt++;
+            if (attempt < maxAttempts) {
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for layer1-service health... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+
+        ConsoleUtil.warn("  layer1-service health check timed out, proceeding anyway...");
     }
 
     private void startDockerServices() throws Exception {
@@ -210,7 +343,56 @@ public class InitCommand implements Runnable {
     }
 
     private void waitForServices() throws Exception {
-        // Wait for Fuseki (port 3030) and MMS (port 8080) to be available
+        // Wait for Fuseki (port 3030) first
+        int maxAttempts = 30;
+        int attempt = 0;
+
+        ConsoleUtil.info("  Waiting for Fuseki (quad-store-server)...");
+        while (attempt < maxAttempts) {
+            try {
+                try (java.net.Socket fusekiSocket = new java.net.Socket()) {
+                    fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
+                }
+                ConsoleUtil.success("  Fuseki is ready");
+                break;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    throw new Exception("Fuseki did not become ready within timeout. Please check Docker logs:\n" +
+                            "  docker logs quad-store-server");
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for Fuseki... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+
+        // Now wait for layer1-service (port 8080)
+        attempt = 0;
+        ConsoleUtil.info("  Waiting for layer1-service...");
+        while (attempt < maxAttempts) {
+            try {
+                try (java.net.Socket mmsSocket = new java.net.Socket()) {
+                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
+                }
+                ConsoleUtil.success("  Services are ready");
+                return;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    throw new Exception("layer1-service did not become ready within timeout. Please check Docker logs:\n" +
+                            "  docker logs layer1-service");
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+    }
+
+    private void waitForFuseki() throws Exception {
         int maxAttempts = 30;
         int attempt = 0;
 
@@ -219,28 +401,183 @@ public class InitCommand implements Runnable {
                 try (java.net.Socket fusekiSocket = new java.net.Socket()) {
                     fusekiSocket.connect(new java.net.InetSocketAddress("localhost", 3030), 1000);
                 }
-
-                try (java.net.Socket mmsSocket = new java.net.Socket()) {
-                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
-                }
-
-                // Both services are up
-                ConsoleUtil.success("  Services are ready");
+                ConsoleUtil.success("  Fuseki is ready");
                 return;
             } catch (Exception e) {
                 attempt++;
-                if (attempt < maxAttempts) {
-                    Thread.sleep(2000);
+                if (attempt >= maxAttempts) {
+                    throw new Exception("Fuseki did not become ready within timeout. Please check Docker logs:\n" +
+                            "  docker logs quad-store-server");
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for Fuseki... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+    }
+
+    private void waitForLayer1Service() throws Exception {
+        int maxAttempts = 30;
+        int attempt = 0;
+
+        while (attempt < maxAttempts) {
+            try {
+                try (java.net.Socket mmsSocket = new java.net.Socket()) {
+                    mmsSocket.connect(new java.net.InetSocketAddress("localhost", 8080), 1000);
+                }
+                ConsoleUtil.success("  layer1-service is ready");
+                return;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    throw new Exception("layer1-service did not become ready within timeout. Please check Docker logs:\n" +
+                            "  docker logs layer1-service");
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+    }
+
+    private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws Exception {
+        String[] commands = new String[]{"docker compose", "docker-compose"};
+
+        for (String command : commands) {
+            String[] cmdParts = command.split(" ");
+            ProcessBuilder pb = new ProcessBuilder(
+                    cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d", serviceName
+            );
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
                     if (parent.isVerbose()) {
-                        ConsoleUtil.debug("  Waiting for services... (attempt " + attempt + "/" + maxAttempts + ")");
+                        ConsoleUtil.debug("  " + line);
                     }
+                }
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void loadClusterConfig(String mmsUrl) throws Exception {
+        ConsoleUtil.info("Loading cluster configuration into Fuseki...");
+
+        java.io.InputStream resourceStream = getClass().getClassLoader()
+                .getResourceAsStream("cluster.trig");
+        if (resourceStream == null) {
+            throw new Exception("cluster.trig not found in classpath");
+        }
+
+        StringBuilder trigContent = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(resourceStream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                trigContent.append(line).append("\n");
+            }
+        }
+
+        ConsoleUtil.success("  Cluster configuration loaded");
+
+        String fusekiUrl = mmsUrl.replace(":8080", ":3030").replaceFirst("http://([^/]+).*", "http://$1/ds/data");
+
+        int maxAttempts = 5;
+        int attempt = 0;
+        Exception lastException = null;
+
+        while (attempt < maxAttempts) {
+            try {
+                Thread.sleep(2000);
+                loadTrigToFuseki(fusekiUrl, trigContent.toString());
+                ConsoleUtil.success("  Cluster configuration loaded into Fuseki");
+                waitForFusekiIndex();
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                attempt++;
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Attempt " + attempt + " failed: " + e.getMessage());
                 }
             }
         }
 
-        throw new Exception("Services did not become ready within timeout. Please check Docker logs:\n" +
-                "  docker logs layer1-service\n" +
-                "  docker logs quad-store-server");
+        throw new Exception("Failed to load cluster config into Fuseki after " + maxAttempts + " attempts", lastException);
+    }
+
+    private void loadTrigToFuseki(String fusekiUrl, String trigContent) throws Exception {
+        java.net.URL url = new java.net.URL(fusekiUrl);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/trig");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(30000);
+        conn.setReadTimeout(30000);
+
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            byte[] input = trigContent.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            os.write(input, 0, input.length);
+        }
+
+        int statusCode = conn.getResponseCode();
+        if (statusCode < 200 || statusCode >= 300) {
+            String body = "";
+            try (java.io.InputStream is = conn.getErrorStream()) {
+                if (is != null) {
+                    body = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                }
+            }
+            throw new Exception("HTTP " + statusCode + " - " + body);
+        }
+    }
+
+    private void waitForFusekiIndex() throws Exception {
+        ConsoleUtil.info("  Ensuring Fuseki index is ready...");
+
+        String fusekiUrl = "http://localhost:3030/ds/sparql";
+
+        int maxAttempts = 10;
+        int attempt = 0;
+
+        while (attempt < maxAttempts) {
+            try {
+                org.apache.hc.client5.http.classic.methods.HttpGet get =
+                        new org.apache.hc.client5.http.classic.methods.HttpGet(fusekiUrl + "?query=SELECT%20%3Fsubject%20WHERE%20%7B%3Fsubject%20%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23type%3E%20%3Fobject%7D%20LIMIT%201");
+                get.setHeader("Accept", "application/sparql-results+xml");
+
+                try (org.apache.hc.client5.http.impl.classic.CloseableHttpClient httpClient =
+                        org.apache.hc.client5.http.impl.classic.HttpClients.createDefault()) {
+                    try (org.apache.hc.client5.http.impl.classic.CloseableHttpResponse response = httpClient.execute(get)) {
+                        int statusCode = response.getCode();
+                        if (statusCode >= 200 && statusCode < 300) {
+                            ConsoleUtil.success("  Fuseki index is ready");
+                            return;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+            }
+
+            attempt++;
+            if (attempt < maxAttempts) {
+                Thread.sleep(1000);
+            }
+        }
+
+        ConsoleUtil.warn("  Could not verify Fuseki index status, proceeding anyway...");
     }
 
     private void createOrg(FlexoMmsClient client, String orgId) throws Exception {

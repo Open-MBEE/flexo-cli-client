@@ -164,19 +164,18 @@ public class FlexoConfig {
 
     public String getLocalJwtSecret() {
         String secret = get("local.jwtSecret");
-        
-        // If no secret is configured, generate and save one
+
         if (secret == null || secret.isEmpty()) {
-            secret = generateJwtSecret();
+            secret = "devsecretpleasechangeinproduction1234567890";
             set("local.jwtSecret", secret);
             try {
                 save();
-                logger.info("Generated and saved new JWT secret");
+                logger.info("Set default JWT secret in configuration");
             } catch (IOException e) {
-                logger.warn("Failed to save generated JWT secret: {}", e.getMessage());
+                logger.warn("Failed to save JWT secret to config: {}", e.getMessage());
             }
         }
-        
+
         return secret;
     }
     
