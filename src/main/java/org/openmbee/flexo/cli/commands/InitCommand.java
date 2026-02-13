@@ -511,6 +511,10 @@ public class InitCommand implements Runnable {
     private void loadClusterConfig(String mmsUrl) throws Exception {
         ConsoleUtil.info("Loading cluster configuration into Fuseki...");
 
+        // First verify Fuseki is available before attempting to load cluster config
+        String fusekiUrl = mmsUrl.replace(":8080", ":3030").replaceFirst("http://([^/]+).*", "http://$1/ds/data");
+        verifyFusekiAvailable(fusekiUrl);
+
         java.io.InputStream resourceStream = getClass().getClassLoader()
                 .getResourceAsStream("cluster.trig");
         if (resourceStream == null) {
@@ -527,8 +531,6 @@ public class InitCommand implements Runnable {
         }
 
         ConsoleUtil.success("  Cluster configuration loaded");
-
-        String fusekiUrl = mmsUrl.replace(":8080", ":3030").replaceFirst("http://([^/]+).*", "http://$1/ds/data");
 
         int maxAttempts = 5;
         int attempt = 0;
@@ -613,6 +615,46 @@ public class InitCommand implements Runnable {
         }
 
         ConsoleUtil.warn("  Could not verify Fuseki index status, proceeding anyway...");
+    }
+
+    private void verifyFusekiAvailable(String fusekiUrl) throws Exception {
+        ConsoleUtil.info("  Verifying Fuseki quadstore is available...");
+        
+        int maxAttempts = 10;
+        int attempt = 0;
+        Exception lastException = null;
+        
+        while (attempt < maxAttempts) {
+            try {
+                java.net.URL url = new java.net.URL(fusekiUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                
+                int statusCode = conn.getResponseCode();
+                // Accept 200 (OK) or 404 (dataset exists but no data yet) as success
+                if (statusCode >= 200 && statusCode < 500) {
+                    ConsoleUtil.success("  Fuseki quadstore is available");
+                    return;
+                }
+                
+                lastException = new Exception("HTTP " + statusCode);
+            } catch (Exception e) {
+                lastException = e;
+            }
+            
+            attempt++;
+            if (attempt < maxAttempts) {
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for Fuseki quadstore... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            }
+        }
+        
+        throw new Exception("Fuseki quadstore is not available after " + maxAttempts + " attempts. " +
+                "Please check Docker logs: docker logs quad-store-server", lastException);
     }
 
     private void createOrg(FlexoMmsClient client, String orgId) throws Exception {
@@ -779,6 +821,13 @@ public class InitCommand implements Runnable {
     private void generateAndLoadClusterConfig(FlexoMmsClient client, String mmsUrl) throws Exception {
         ConsoleUtil.info("Loading cluster configuration...");
 
+        // Determine Fuseki URL from MMS URL (default: replace 8080 with 3030)
+        // Use /ds/data without ?default to load all named graphs from TriG
+        String fusekiUrl = mmsUrl.replace(":8080", ":3030").replaceFirst("http://([^/]+).*", "http://$1/ds/data");
+        
+        // Verify Fuseki is available before attempting to load cluster config
+        verifyFusekiAvailable(fusekiUrl);
+
         java.io.InputStream resourceStream = getClass().getClassLoader()
                 .getResourceAsStream("cluster.trig");
         if (resourceStream == null) {
@@ -796,10 +845,6 @@ public class InitCommand implements Runnable {
 
         ConsoleUtil.success("  Cluster configuration generated");
         ConsoleUtil.info("Loading cluster configuration into Fuseki...");
-
-        // Determine Fuseki URL from MMS URL (default: replace 8080 with 3030)
-        // Use /ds/data without ?default to load all named graphs from TriG
-        String fusekiUrl = mmsUrl.replace(":8080", ":3030").replaceFirst("http://([^/]+).*", "http://$1/ds/data");
 
         // POST the generated TriG to Fuseki
         org.apache.hc.client5.http.classic.methods.HttpPost post =
