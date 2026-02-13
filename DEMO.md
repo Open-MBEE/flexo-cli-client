@@ -218,7 +218,24 @@ EOF
     --input /tmp/test-model.ttl
 ```
 
-### 4.3 Push Different RDF Formats
+### 4.3 Verify Push
+
+```bash
+# Pull from default branch to verify the push
+./build/install/flexo/bin/flexo pull --branch master
+
+# Pull from feature branch to verify
+./build/install/flexo/bin/flexo pull --branch feature-xyz
+```
+
+Expected output:
+```
+Pulling from localorg/localrepo/master...
+Fetched model with 5 statements
+[RDF/Turtle output showing the pushed model]
+```
+
+### 4.4 Push Different RDF Formats
 
 ```bash
 # Push JSON-LD
@@ -232,13 +249,13 @@ EOF
     --input model.rdf
 ```
 
-### 4.4 Push from stdin
+### 4.5 Push from stdin
 
 ```bash
 cat /tmp/test-model.ttl | ./build/install/flexo/bin/flexo push --message "Push from stdin"
 ```
 
-### 4.5 Alternative Syntax
+### 4.6 Alternative Syntax
 
 ```bash
 ./build/install/flexo/bin/flexo push master --message "Update master" --input /tmp/test-model.ttl
