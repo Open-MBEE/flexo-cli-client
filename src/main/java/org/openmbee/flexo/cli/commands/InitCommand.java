@@ -31,14 +31,13 @@ public class InitCommand implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
     private static final String DOCKER = "docker";
-    private static final String DOCKER_COMPOSE_FILE = "DOCKER_COMPOSE_FILE";
+    private static final String DOCKER_COMPOSE_FILE = "flexo-mms-docker-compose.yml";
     private static final String FUSEKI = "Fuseki";
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
     private static final String CONTENT_TYPE_TRIG = "application/trig";
     private static final String CONTENT_TYPE_TURTLE = "text/turtle";
 
-    // Helper methods to reduce duplication
-    private void waitForService(String name, int port, String logMessage, String errorMessage) throws Exception {
+    private void waitForService(String name, int port, String logMessage, String errorMessage) throws InterruptedException, DockerException {
         int maxAttempts = 30;
         int attempt = 0;
         ConsoleUtil.info("  Waiting for " + logMessage + "...");
@@ -47,10 +46,19 @@ public class InitCommand implements Runnable {
                 socket.connect(new java.net.InetSocketAddress("localhost", port), 1000);
                 ConsoleUtil.success("  " + name + " is ready");
                 return;
-            } catch (Exception e) {
+            } catch (java.net.ConnectException | java.net.SocketTimeoutException e) {
                 attempt++;
                 if (attempt >= maxAttempts) {
-                    throw new Exception(errorMessage);
+                    throw new DockerException(errorMessage);
+                }
+                Thread.sleep(2000);
+                if (parent.isVerbose()) {
+                    ConsoleUtil.debug("  Waiting for " + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
+                }
+            } catch (IOException e) {
+                attempt++;
+                if (attempt >= maxAttempts) {
+                    throw new DockerException(errorMessage, e);
                 }
                 Thread.sleep(2000);
                 if (parent.isVerbose()) {
@@ -141,7 +149,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void startFuseki() throws Exception {
+    private void startFuseki() throws ConfigurationException, DockerException, InterruptedException, IOException {
         ConsoleUtil.info("Starting Fuseki (quad-store-server)...");
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
@@ -169,7 +177,7 @@ public class InitCommand implements Runnable {
         waitForFuseki();
     }
 
-    private void startLayer1Service(String mmsUrl) throws Exception {
+    private void startLayer1Service(String mmsUrl) throws ConfigurationException, DockerException, InterruptedException, IOException {
         ConsoleUtil.info("Starting layer1-service...");
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
@@ -194,7 +202,7 @@ public class InitCommand implements Runnable {
         waitForLayer1ServiceHealth(mmsUrl);
     }
 
-    private void waitForLayer1ServiceHealth(String mmsUrl) throws Exception {
+    private void waitForLayer1ServiceHealth(String mmsUrl) throws InterruptedException {
         String healthUrl = mmsUrl + "/";
         int maxAttempts = 15;
         int attempt = 0;
@@ -224,7 +232,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.warn("  layer1-service check timed out, proceeding anyway...");
     }
 
-    private boolean runDockerCompose(java.io.File composeFile) throws Exception {
+    private boolean runDockerCompose(java.io.File composeFile) throws IOException, InterruptedException {
         String[][] commandVariants = new String[][] {
             new String[] { DOCKER, "compose" },
             new String[] { "docker-compose" }
@@ -259,7 +267,7 @@ public class InitCommand implements Runnable {
         return false;
     }
 
-    private java.io.File extractDockerComposeFromClasspath() throws Exception {
+    private java.io.File extractDockerComposeFromClasspath() throws ConfigurationException, IOException {
         // Load docker-compose file from classpath
         java.io.InputStream resourceStream = getClass().getClassLoader()
                 .getResourceAsStream("DOCKER_COMPOSE_FILE");
@@ -324,24 +332,24 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void waitForServices() throws Exception {
+    private void waitForServices() throws InterruptedException, DockerException {
         waitForService(FUSEKI, 3030, "Fuseki (quad-store-server)", 
             "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
         waitForService("layer1-service", 8080, "layer1-service", 
             "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
     }
 
-    private void waitForFuseki() throws Exception {
+    private void waitForFuseki() throws InterruptedException, DockerException {
         waitForService(FUSEKI, 3030, "Fuseki", 
             "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
     }
 
-    private void waitForLayer1Service() throws Exception {
+    private void waitForLayer1Service() throws InterruptedException, DockerException {
         waitForService("layer1-service", 8080, "layer1-service", 
             "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
     }
 
-    private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws Exception {
+    private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws IOException, InterruptedException {
         String[][] commandVariants = new String[][] {
             new String[] { DOCKER, "compose" },
             new String[] { "docker-compose" }
@@ -377,7 +385,7 @@ public class InitCommand implements Runnable {
         return false;
     }
 
-    private void loadClusterConfig(String mmsUrl) throws Exception {
+    private void loadClusterConfig(String mmsUrl) throws ConfigurationException, ServiceException, IOException, InterruptedException {
         ConsoleUtil.info("Loading cluster configuration into Fuseki...");
 
         // First verify Fuseki is available before attempting to load cluster config
@@ -387,7 +395,7 @@ public class InitCommand implements Runnable {
         java.io.InputStream resourceStream = getClass().getClassLoader()
                 .getResourceAsStream("cluster.trig");
         if (resourceStream == null) {
-            throw new Exception("cluster.trig not found in classpath");
+            throw new ConfigurationException("cluster.trig not found in classpath");
         }
 
         StringBuilder trigContent = new StringBuilder();
@@ -421,10 +429,10 @@ public class InitCommand implements Runnable {
             }
         }
 
-        throw new Exception("Failed to load cluster config into Fuseki after " + maxAttempts + " attempts", lastException);
+        throw new ServiceException("Failed to load cluster config into Fuseki after " + maxAttempts + " attempts", lastException);
     }
 
-    private void loadTrigToFuseki(String fusekiUrl, String trigContent) throws Exception {
+    private void loadTrigToFuseki(String fusekiUrl, String trigContent) throws ServiceException, IOException {
         java.net.URL url = new java.net.URL(fusekiUrl);
         java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
@@ -446,11 +454,11 @@ public class InitCommand implements Runnable {
                     body = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 }
             }
-            throw new Exception("HTTP " + statusCode + " - " + body);
+            throw new ServiceException("HTTP " + statusCode + " - " + body, statusCode);
         }
     }
 
-    private void waitForFusekiIndex() throws Exception {
+    private void waitForFusekiIndex() throws InterruptedException, ServiceException {
         ConsoleUtil.info("  Ensuring Fuseki index is ready...");
 
         String fusekiUrl = "http://localhost:3030/ds/sparql";
@@ -486,7 +494,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.warn("  Could not verify Fuseki index status, proceeding anyway...");
     }
 
-    private void verifyFusekiAvailable(String fusekiUrl) throws Exception {
+    private void verifyFusekiAvailable(String fusekiUrl) throws ServiceException, InterruptedException {
         ConsoleUtil.info("  Verifying Fuseki quadstore is available...");
         
         int maxAttempts = 10;
@@ -522,11 +530,11 @@ public class InitCommand implements Runnable {
             }
         }
         
-        throw new Exception("Fuseki quadstore is not available after " + maxAttempts + " attempts. " +
+        throw new ServiceException("Fuseki quadstore is not available after " + maxAttempts + " attempts. " +
                 "Please check Docker logs: docker logs quad-store-server", lastException);
     }
 
-    private void createOrg(FlexoMmsClient client, String orgId) throws Exception {
+    private void createOrg(FlexoMmsClient client, String orgId) throws ServiceException, IOException, ResourceAlreadyExistsException {
         ConsoleUtil.info("Creating organization '" + orgId + "'...");
 
         // Send empty RDF - the server will fill in the required properties
@@ -546,7 +554,7 @@ public class InitCommand implements Runnable {
             if (e.getMessage().contains("409") || e.getMessage().contains("Conflict")) {
                 ConsoleUtil.warn("  Organization already exists");
                 if (!force) {
-                    throw new Exception("Organization '" + orgId + "' already exists. Use --force to override.");
+                    throw new ResourceAlreadyExistsException("Organization", orgId, "Use --force to override.");
                 }
             } else {
                 throw e;
@@ -554,7 +562,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void createRepo(FlexoMmsClient client, String orgId, String repoId) throws Exception {
+    private void createRepo(FlexoMmsClient client, String orgId, String repoId) throws ServiceException, IOException, ResourceAlreadyExistsException {
         ConsoleUtil.info("Creating repository '" + repoId + "'...");
 
         // Send empty RDF - the server will fill in the required properties
@@ -574,7 +582,7 @@ public class InitCommand implements Runnable {
             if (e.getMessage().contains("409") || e.getMessage().contains("Conflict")) {
                 ConsoleUtil.warn("  Repository already exists");
                 if (!force) {
-                    throw new Exception("Repository '" + repoId + "' already exists. Use --force to override.");
+                    throw new ResourceAlreadyExistsException("Repository", repoId, "Use --force to override.");
                 }
             } else {
                 throw e;
@@ -582,7 +590,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void createInitialBranch(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+    private void createInitialBranch(FlexoMmsClient client, String orgId, String repoId, String branchId) throws ServiceException, IOException, ResourceAlreadyExistsException {
         ConsoleUtil.info("Creating initial branch '" + branchId + "'...");
 
         // First, create an empty model commit on the branch
@@ -612,7 +620,7 @@ public class InitCommand implements Runnable {
             } else if (e.getMessage().contains("409") || e.getMessage().contains("Conflict")) {
                 ConsoleUtil.warn("  Branch already exists");
                 if (!force) {
-                    throw new Exception("Branch '" + branchId + "' already exists. Use --force to override.");
+                    throw new ResourceAlreadyExistsException("Branch", branchId, "Use --force to override.");
                 }
             } else {
                 throw e;
@@ -620,7 +628,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void createBranchWithCommit(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+    private void createBranchWithCommit(FlexoMmsClient client, String orgId, String repoId, String branchId) throws ServiceException, IOException {
         // Create a self-referencing commit first by PUTting an empty graph
         // This creates both the branch and an initial commit atomically
         String graphUrl = client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId + "/branches/" + branchId + "/graph";
@@ -639,7 +647,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void createBranch(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+    private void createBranch(FlexoMmsClient client, String orgId, String repoId, String branchId) throws ServiceException, IOException, ResourceAlreadyExistsException {
         ConsoleUtil.info("Creating branch '" + branchId + "'...");
 
         // Send empty RDF - the server will fill in the required properties
@@ -660,7 +668,7 @@ public class InitCommand implements Runnable {
             if (e.getMessage().contains("412") || e.getMessage().contains("Precondition")) {
                 ConsoleUtil.warn("  Branch already exists");
                 if (!force) {
-                    throw new Exception("Branch '" + branchId + "' already exists. Use --force to override.");
+                    throw new ResourceAlreadyExistsException("Branch", branchId, "Use --force to override.");
                 }
             } else if (e.getMessage().contains("400")) {
                 // Try alternative approach - creating with a self-reference commit
@@ -672,7 +680,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void createBranchAlternative(FlexoMmsClient client, String orgId, String repoId, String branchId) throws Exception {
+    private void createBranchAlternative(FlexoMmsClient client, String orgId, String repoId, String branchId) throws ServiceException, IOException {
         // Send empty RDF - the server will fill in the required properties
         String branchRdf = "";
 
@@ -687,7 +695,7 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void generateAndLoadClusterConfig(FlexoMmsClient client, String mmsUrl) throws Exception {
+    private void generateAndLoadClusterConfig(FlexoMmsClient client, String mmsUrl) throws ConfigurationException, ServiceException, IOException, InterruptedException, org.apache.hc.core5.http.ParseException {
         ConsoleUtil.info("Loading cluster configuration...");
 
         // Determine Fuseki URL from MMS URL (default: replace 8080 with 3030)
@@ -700,7 +708,7 @@ public class InitCommand implements Runnable {
         java.io.InputStream resourceStream = getClass().getClassLoader()
                 .getResourceAsStream("cluster.trig");
         if (resourceStream == null) {
-            throw new Exception("cluster.trig not found in classpath");
+            throw new ConfigurationException("cluster.trig not found in classpath");
         }
 
         StringBuilder trigContent = new StringBuilder();
@@ -728,7 +736,7 @@ public class InitCommand implements Runnable {
                 if (statusCode < 200 || statusCode >= 300) {
                     String body = response.getEntity() != null ?
                             org.apache.hc.core5.http.io.entity.EntityUtils.toString(response.getEntity()) : "";
-                    throw new Exception("Failed to load cluster config into Fuseki: HTTP " + statusCode + " - " + body);
+                    throw new ServiceException("Failed to load cluster config into Fuseki: HTTP " + statusCode + " - " + body, statusCode);
                 }
             }
         }
@@ -736,7 +744,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.success("  Cluster configuration loaded into Fuseki");
     }
 
-    private void updateConfigDefaults(FlexoConfig config, String orgId, String repoId) throws Exception {
+    private void updateConfigDefaults(FlexoConfig config, String orgId, String repoId) throws IOException {
         ConsoleUtil.info("Updating configuration file...");
 
         config.set("default.org", orgId);
