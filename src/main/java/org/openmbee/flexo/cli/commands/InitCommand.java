@@ -30,6 +30,13 @@ public class InitCommand implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
+    private static final String DOCKER = "docker";
+    private static final String DOCKER_COMPOSE_FILE = "flexo-mms-docker-compose.yml";
+    private static final String DOCKER_COMPOSE_TEMP_PREFIX = "flexo-mms-docker-compose-";
+    private static final String HEADER_CONTENT_TYPE = "Content-Type";
+    private static final String CONTENT_TYPE_TRIG = "application/trig";
+    private static final String CONTENT_TYPE_TURTLE = "text/turtle";
+
     // Helper methods to reduce duplication
     private void waitForService(String name, int port, String logMessage, String errorMessage) throws Exception {
         int maxAttempts = 30;
@@ -516,7 +523,7 @@ public class InitCommand implements Runnable {
         java.net.URL url = new java.net.URL(fusekiUrl);
         java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/trig");
+        conn.setRequestProperty(HEADER_CONTENT_TYPE, CONTENT_TYPE_TRIG);
         conn.setDoOutput(true);
         conn.setConnectTimeout(30000);
         conn.setReadTimeout(30000);
@@ -621,8 +628,8 @@ public class InitCommand implements Runnable {
         String orgRdf = "";
 
         HttpPut request = new HttpPut(client.getBaseUrl() + "/orgs/" + orgId);
-        request.setHeader("Content-Type", "text/turtle");
-        request.setEntity(new StringEntity(orgRdf, ContentType.parse("text/turtle")));
+        request.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
+        request.setEntity(new StringEntity(orgRdf, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         try {
             String response = client.executeRequest(request);
@@ -649,8 +656,8 @@ public class InitCommand implements Runnable {
         String repoRdf = "";
 
         HttpPut request = new HttpPut(client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId);
-        request.setHeader("Content-Type", "text/turtle");
-        request.setEntity(new StringEntity(repoRdf, ContentType.parse("text/turtle")));
+        request.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
+        request.setEntity(new StringEntity(repoRdf, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         try {
             String response = client.executeRequest(request);
@@ -682,9 +689,9 @@ public class InitCommand implements Runnable {
 
         // PUT empty model to create initial commit
         HttpPut graphRequest = new HttpPut(graphUrl);
-        graphRequest.setHeader("Content-Type", "text/turtle");
+        graphRequest.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
         graphRequest.setHeader("X-Commit-Message", "Initial commit");
-        graphRequest.setEntity(new StringEntity(emptyModel, ContentType.parse("text/turtle")));
+        graphRequest.setEntity(new StringEntity(emptyModel, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         try {
             String response = client.executeRequest(graphRequest);
@@ -716,9 +723,9 @@ public class InitCommand implements Runnable {
         String emptyModel = "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n";
 
         HttpPut request = new HttpPut(graphUrl);
-        request.setHeader("Content-Type", "text/turtle");
+        request.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
         request.setHeader("X-Commit-Message", "Initial commit");
-        request.setEntity(new StringEntity(emptyModel, ContentType.parse("text/turtle")));
+        request.setEntity(new StringEntity(emptyModel, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         String response = client.executeRequest(request);
         ConsoleUtil.success("  Branch '" + branchId + "' created with initial commit");
@@ -734,9 +741,9 @@ public class InitCommand implements Runnable {
         String branchRdf = "";
 
         HttpPut request = new HttpPut(client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId + "/branches/" + branchId);
-        request.setHeader("Content-Type", "text/turtle");
+        request.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
         request.setHeader("If-None-Match", "*"); // Create only if doesn't exist
-        request.setEntity(new StringEntity(branchRdf, ContentType.parse("text/turtle")));
+        request.setEntity(new StringEntity(branchRdf, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         try {
             String response = client.executeRequest(request);
@@ -765,8 +772,8 @@ public class InitCommand implements Runnable {
         String branchRdf = "";
 
         HttpPut request = new HttpPut(client.getBaseUrl() + "/orgs/" + orgId + "/repos/" + repoId + "/branches/" + branchId);
-        request.setHeader("Content-Type", "text/turtle");
-        request.setEntity(new StringEntity(branchRdf, ContentType.parse("text/turtle")));
+        request.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TURTLE);
+        request.setEntity(new StringEntity(branchRdf, ContentType.parse(CONTENT_TYPE_TURTLE)));
 
         String response = client.executeRequest(request);
         ConsoleUtil.success("  Branch created (alternative method)");
@@ -806,8 +813,8 @@ public class InitCommand implements Runnable {
         // POST the generated TriG to Fuseki
         org.apache.hc.client5.http.classic.methods.HttpPost post =
                 new org.apache.hc.client5.http.classic.methods.HttpPost(fusekiUrl);
-        post.setHeader("Content-Type", "application/trig");
-        post.setEntity(new StringEntity(trigContent.toString(), ContentType.parse("application/trig")));
+        post.setHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_TRIG);
+        post.setEntity(new StringEntity(trigContent.toString(), ContentType.parse(CONTENT_TYPE_TRIG)));
 
         try (org.apache.hc.client5.http.impl.classic.CloseableHttpClient httpClient =
                 org.apache.hc.client5.http.impl.classic.HttpClients.createDefault()) {
