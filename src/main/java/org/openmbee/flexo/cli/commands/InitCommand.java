@@ -31,8 +31,8 @@ public class InitCommand implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
     private static final String DOCKER = "docker";
-    private static final String DOCKER_COMPOSE_FILE = "flexo-mms-docker-compose.yml";
-    private static final String DOCKER_COMPOSE_TEMP_PREFIX = "flexo-mms-docker-compose-";
+    private static final String DOCKER_COMPOSE_FILE = "DOCKER_COMPOSE_FILE";
+    private static final String FUSEKI = "Fuseki";
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
     private static final String CONTENT_TYPE_TRIG = "application/trig";
     private static final String CONTENT_TYPE_TURTLE = "text/turtle";
@@ -58,14 +58,6 @@ public class InitCommand implements Runnable {
                 }
             }
         }
-    }
-
-    private void throwConfigNotFound(String resource) throws Exception {
-        throw new Exception(resource + " not found in classpath. Please ensure the application is properly packaged.");
-    }
-
-    private void throwServiceNotReady(String service, String logs) throws Exception {
-        throw new Exception(service + " did not become ready within timeout. Please check Docker logs:\n  " + logs);
     }
 
     @ParentCommand
@@ -154,7 +146,7 @@ public class InitCommand implements Runnable {
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
-            throw new ConfigurationException("flexo-mms-docker-compose.yml not found in classpath. " +
+            throw new ConfigurationException("DOCKER_COMPOSE_FILE not found in classpath. " +
                     "Please ensure the application is properly packaged.");
         }
 
@@ -182,7 +174,7 @@ public class InitCommand implements Runnable {
 
         java.io.File composeFile = extractDockerComposeFromClasspath();
         if (composeFile == null) {
-            throw new ConfigurationException("flexo-mms-docker-compose.yml not found in classpath. " +
+            throw new ConfigurationException("DOCKER_COMPOSE_FILE not found in classpath. " +
                     "Please ensure the application is properly packaged.");
         }
 
@@ -200,64 +192,6 @@ public class InitCommand implements Runnable {
 
         ConsoleUtil.info("  Verifying layer1-service health...");
         waitForLayer1ServiceHealth(mmsUrl);
-    }
-
-    private java.io.File modifyDockerComposeWithJwtSecret(java.io.File originalFile, String jwtSecret) throws Exception {
-        java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
-        java.io.File tempFile;
-        if (System.getProperty("os.name").toLowerCase().contains("unix")) {
-            tempFile = java.nio.file.Files.createTempFile(
-                tempDir.toPath(),
-                "flexo-mms-docker-compose-",
-                ".yml",
-                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
-                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
-                )
-            ).toFile();
-        } else {
-            tempFile = java.nio.file.Files.createTempFile(
-                "flexo-mms-docker-compose-",
-                ".yml"
-            ).toFile();
-            tempFile.setReadable(true, false);
-            tempFile.setWritable(true, true);
-            tempFile.setExecutable(true, false);
-        }
-        tempFile.deleteOnExit();
-
-        StringBuilder content = new StringBuilder();
-        try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.FileReader(originalFile))) {
-            String line;
-            boolean inLayer1Service = false;
-            int indentLevel = 0;
-            while ((line = reader.readLine()) != null) {
-                if (line.trim().startsWith("layer1-service:")) {
-                    inLayer1Service = true;
-                    indentLevel = line.indexOf("layer1-service");
-                } else if (inLayer1Service && !line.trim().isEmpty() && !line.startsWith(" ")) {
-                    inLayer1Service = false;
-                }
-
-                if (inLayer1Service && line.trim().startsWith("- JWT_SECRET=")) {
-                    line = "      - JWT_SECRET=" + jwtSecret;
-                } else if (inLayer1Service && line.trim().startsWith("- JWT_SECRET=${")) {
-                    line = "      - JWT_SECRET=" + jwtSecret;
-                }
-
-                content.append(line).append("\n");
-            }
-        }
-
-        try (java.io.FileWriter writer = new java.io.FileWriter(tempFile)) {
-            writer.write(content.toString());
-        }
-
-        if (parent.isVerbose()) {
-            ConsoleUtil.debug("  Modified docker-compose with JWT secret to: " + tempFile.getAbsolutePath());
-        }
-
-        return tempFile;
     }
 
     private void waitForLayer1ServiceHealth(String mmsUrl) throws Exception {
@@ -290,38 +224,9 @@ public class InitCommand implements Runnable {
         ConsoleUtil.warn("  layer1-service check timed out, proceeding anyway...");
     }
 
-    private void startDockerServices() throws Exception {
-        ConsoleUtil.info("Starting Docker services...");
-
-        java.io.File composeFile = extractDockerComposeFromClasspath();
-        if (composeFile == null) {
-            throw new Exception("flexo-mms-docker-compose.yml not found in classpath. " +
-                    "Please ensure the application is properly packaged.");
-        }
-
-        ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
-
-        if (!isDockerAvailable()) {
-            throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
-        }
-
-        boolean success = runDockerCompose(composeFile);
-
-        if (!success) {
-            throw new Exception("Failed to start Docker services. Please check Docker logs:\n" +
-                    "  docker compose logs\n" +
-                    "  or: docker-compose logs");
-        }
-
-        ConsoleUtil.success("  Docker services started");
-        ConsoleUtil.info("  Waiting for services to be ready...");
-
-        waitForServices();
-    }
-
     private boolean runDockerCompose(java.io.File composeFile) throws Exception {
         String[][] commandVariants = new String[][] {
-            new String[] { "docker", "compose" },
+            new String[] { DOCKER, "compose" },
             new String[] { "docker-compose" }
         };
 
@@ -357,7 +262,7 @@ public class InitCommand implements Runnable {
     private java.io.File extractDockerComposeFromClasspath() throws Exception {
         // Load docker-compose file from classpath
         java.io.InputStream resourceStream = getClass().getClassLoader()
-                .getResourceAsStream("flexo-mms-docker-compose.yml");
+                .getResourceAsStream("DOCKER_COMPOSE_FILE");
         
         if (resourceStream == null) {
             return null;
@@ -420,14 +325,14 @@ public class InitCommand implements Runnable {
     }
 
     private void waitForServices() throws Exception {
-        waitForService("Fuseki", 3030, "Fuseki (quad-store-server)", 
+        waitForService(FUSEKI, 3030, "Fuseki (quad-store-server)", 
             "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
         waitForService("layer1-service", 8080, "layer1-service", 
             "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
     }
 
     private void waitForFuseki() throws Exception {
-        waitForService("Fuseki", 3030, "Fuseki", 
+        waitForService(FUSEKI, 3030, "Fuseki", 
             "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
     }
 
@@ -438,7 +343,7 @@ public class InitCommand implements Runnable {
 
     private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws Exception {
         String[][] commandVariants = new String[][] {
-            new String[] { "docker", "compose" },
+            new String[] { DOCKER, "compose" },
             new String[] { "docker-compose" }
         };
 
