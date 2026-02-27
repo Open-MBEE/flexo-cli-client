@@ -36,11 +36,12 @@ public class InitCommand implements Runnable {
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
     private static final String CONTENT_TYPE_TRIG = "application/trig";
     private static final String CONTENT_TYPE_TURTLE = "text/turtle";
+    private static final String MSG_WAITING_FOR = "  Waiting for ";
 
     private void waitForService(String name, int port, String logMessage, String errorMessage) throws InterruptedException, DockerException {
         int maxAttempts = 30;
         int attempt = 0;
-        ConsoleUtil.info("  Waiting for " + logMessage + "...");
+        ConsoleUtil.info(MSG_WAITING_FOR + logMessage + "...");
         while (attempt < maxAttempts) {
             try (java.net.Socket socket = new java.net.Socket()) {
                 socket.connect(new java.net.InetSocketAddress("localhost", port), 1000);
@@ -51,18 +52,28 @@ public class InitCommand implements Runnable {
                 if (attempt >= maxAttempts) {
                     throw new DockerException(errorMessage);
                 }
-                Thread.sleep(2000);
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for " + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug(MSG_WAITING_FOR + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             } catch (IOException e) {
                 attempt++;
                 if (attempt >= maxAttempts) {
                     throw new DockerException(errorMessage, e);
                 }
-                Thread.sleep(2000);
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for " + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug(MSG_WAITING_FOR + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             }
         }
@@ -172,7 +183,7 @@ public class InitCommand implements Runnable {
         }
 
         ConsoleUtil.success("  Fuseki started");
-        ConsoleUtil.info("  Waiting for Fuseki to be ready...");
+        ConsoleUtil.info(MSG_WAITING_FOR + "Fuseki to be ready...");
 
         waitForFuseki();
     }
@@ -194,7 +205,7 @@ public class InitCommand implements Runnable {
         }
 
         ConsoleUtil.success("  layer1-service started");
-        ConsoleUtil.info("  Waiting for layer1-service to be ready...");
+        ConsoleUtil.info(MSG_WAITING_FOR + "layer1-service to be ready...");
 
         waitForLayer1Service();
 
@@ -218,13 +229,14 @@ public class InitCommand implements Runnable {
                 ConsoleUtil.success("  layer1-service is ready");
                 return;
             } catch (Exception e) {
+                // Ignore exceptions, retry
             }
 
             attempt++;
             if (attempt < maxAttempts) {
                 Thread.sleep(2000);
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug(MSG_WAITING_FOR + "layer1-service... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             }
         }
@@ -270,7 +282,7 @@ public class InitCommand implements Runnable {
     private java.io.File extractDockerComposeFromClasspath() throws ConfigurationException, IOException {
         // Load docker-compose file from classpath
         java.io.InputStream resourceStream = getClass().getClassLoader()
-                .getResourceAsStream("DOCKER_COMPOSE_FILE");
+                .getResourceAsStream(DOCKER_COMPOSE_FILE);
         
         if (resourceStream == null) {
             return null;
@@ -420,6 +432,9 @@ public class InitCommand implements Runnable {
                 ConsoleUtil.success("  Cluster configuration loaded into Fuseki");
                 waitForFusekiIndex();
                 return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
             } catch (Exception e) {
                 lastException = e;
                 attempt++;
@@ -483,6 +498,7 @@ public class InitCommand implements Runnable {
                     }
                 }
             } catch (Exception e) {
+                // Ignore exceptions, retry
             }
 
             attempt++;
@@ -525,7 +541,7 @@ public class InitCommand implements Runnable {
             if (attempt < maxAttempts) {
                 Thread.sleep(2000);
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug("  Waiting for Fuseki quadstore... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug(MSG_WAITING_FOR + "Fuseki quadstore... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             }
         }
