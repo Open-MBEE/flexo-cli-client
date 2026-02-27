@@ -172,18 +172,18 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
 
         if (!isDockerAvailable()) {
-            throw new DockerException("Docker is not available. Please install Docker and ensure it's running.");
+            throw new DockerException(DOCKER.substring(0, 1).toUpperCase() + DOCKER.substring(1) + " is not available. Please install Docker and ensure it's running.");
         }
 
         boolean success = runDockerComposeService(composeFile, "quad-store-server");
 
         if (!success) {
-            throw new DockerException("Failed to start Fuseki. Please check Docker logs:\n" +
-                    "  docker logs quad-store-server");
+            throw new DockerException("Failed to start " + FUSEKI + ". Please check Docker logs:\n" +
+                    "  " + DOCKER + " logs quad-store-server");
         }
 
-        ConsoleUtil.success("  Fuseki started");
-        ConsoleUtil.info(MSG_WAITING_FOR + "Fuseki to be ready...");
+        ConsoleUtil.success("  " + FUSEKI + " started");
+        ConsoleUtil.info(MSG_WAITING_FOR + FUSEKI + " to be ready...");
 
         waitForFuseki();
     }
@@ -201,7 +201,7 @@ public class InitCommand implements Runnable {
 
         if (!success) {
             throw new DockerException("Failed to start layer1-service. Please check Docker logs:\n" +
-                    "  docker logs layer1-service");
+                    "  " + DOCKER + " logs layer1-service");
         }
 
         ConsoleUtil.success("  layer1-service started");
@@ -288,12 +288,21 @@ public class InitCommand implements Runnable {
             return null;
         }
 
-        // Create temporary file with secure permissions
-        java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
+        // Create temporary file with secure permissions in system temp directory
+        // Security considerations:
+        // 1. Files.createTempFile() creates files with unique, unpredictable names to prevent
+        //    symlink attacks and race conditions in the publicly writable temp directory
+        // 2. On Unix/Linux/macOS: Explicitly set file permissions to rw------- (0600) at creation time
+        //    to prevent other users from reading the docker-compose configuration
+        // 3. On Windows: Set restrictive ACLs after creation to limit access to owner only
+        // 4. File is marked for deletion on JVM exit to avoid leaving sensitive data in temp directory
         java.io.File tempFile;
-        if (System.getProperty("os.name").toLowerCase().contains("unix")) {
+        if (System.getProperty("os.name").toLowerCase().contains("unix") || 
+            System.getProperty("os.name").toLowerCase().contains("linux") ||
+            System.getProperty("os.name").toLowerCase().contains("mac")) {
+            // On Unix-like systems, create file with restrictive permissions (owner read/write only)
+            // This prevents other users from reading the file in the shared temp directory
             tempFile = java.nio.file.Files.createTempFile(
-                tempDir.toPath(),
                 "flexo-mms-docker-compose-",
                 ".yml",
                 java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
@@ -301,15 +310,19 @@ public class InitCommand implements Runnable {
                 )
             ).toFile();
         } else {
+            // On Windows and other systems, create file then set restrictive permissions
             tempFile = java.nio.file.Files.createTempFile(
                 "flexo-mms-docker-compose-",
                 ".yml"
             ).toFile();
-            tempFile.setReadable(true, false);
-            tempFile.setWritable(true, true);
-            tempFile.setExecutable(true, false);
+            // Set file to be readable/writable only by owner, remove all other permissions
+            tempFile.setReadable(false, false);  // Remove read for others
+            tempFile.setReadable(true, true);    // Add read for owner
+            tempFile.setWritable(false, false);  // Remove write for others
+            tempFile.setWritable(true, true);    // Add write for owner
+            tempFile.setExecutable(false, false); // Remove execute for all
         }
-        tempFile.deleteOnExit(); // Clean up on JVM exit
+        tempFile.deleteOnExit(); // Clean up on JVM exit to avoid leaving sensitive data
 
         // Copy resource to temporary file
         try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
@@ -334,7 +347,7 @@ public class InitCommand implements Runnable {
 
     private boolean isDockerAvailable() {
         try {
-            ProcessBuilder pb = new ProcessBuilder("docker", "--version");
+            ProcessBuilder pb = new ProcessBuilder(DOCKER, "--version");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             int exitCode = process.waitFor();
@@ -345,20 +358,20 @@ public class InitCommand implements Runnable {
     }
 
     private void waitForServices() throws InterruptedException, DockerException {
-        waitForService(FUSEKI, 3030, "Fuseki (quad-store-server)", 
-            "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
+        waitForService(FUSEKI, 3030, FUSEKI + " (quad-store-server)", 
+            FUSEKI + " did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs quad-store-server");
         waitForService("layer1-service", 8080, "layer1-service", 
-            "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
+            "layer1-service did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs layer1-service");
     }
 
     private void waitForFuseki() throws InterruptedException, DockerException {
-        waitForService(FUSEKI, 3030, "Fuseki", 
-            "Fuseki did not become ready within timeout. Please check Docker logs:\n  docker logs quad-store-server");
+        waitForService(FUSEKI, 3030, FUSEKI, 
+            FUSEKI + " did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs quad-store-server");
     }
 
     private void waitForLayer1Service() throws InterruptedException, DockerException {
         waitForService("layer1-service", 8080, "layer1-service", 
-            "layer1-service did not become ready within timeout. Please check Docker logs:\n  docker logs layer1-service");
+            "layer1-service did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs layer1-service");
     }
 
     private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws IOException, InterruptedException {
@@ -541,13 +554,13 @@ public class InitCommand implements Runnable {
             if (attempt < maxAttempts) {
                 Thread.sleep(2000);
                 if (parent.isVerbose()) {
-                    ConsoleUtil.debug(MSG_WAITING_FOR + "Fuseki quadstore... (attempt " + attempt + "/" + maxAttempts + ")");
+                    ConsoleUtil.debug(MSG_WAITING_FOR + FUSEKI + " quadstore... (attempt " + attempt + "/" + maxAttempts + ")");
                 }
             }
         }
         
-        throw new ServiceException("Fuseki quadstore is not available after " + maxAttempts + " attempts. " +
-                "Please check Docker logs: docker logs quad-store-server", lastException);
+        throw new ServiceException(FUSEKI + " quadstore is not available after " + maxAttempts + " attempts. " +
+                "Please check Docker logs: " + DOCKER + " logs quad-store-server", lastException);
     }
 
     private void createOrg(FlexoMmsClient client, String orgId) throws ServiceException, IOException, ResourceAlreadyExistsException {
