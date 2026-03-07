@@ -86,8 +86,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_MissingOrg() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo(null, "repo")
         );
         
@@ -97,8 +97,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_EmptyOrg() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("", "repo")
         );
         
@@ -107,8 +107,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_MissingRepo() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("org", null)
         );
         
@@ -118,8 +118,8 @@ class BaseCommandTest {
 
     @Test
     void testValidateOrgAndRepo_EmptyRepo() {
-        BaseCommand.CommandException exception = assertThrows(
-            BaseCommand.CommandException.class,
+        CommandExecutionException exception = assertThrows(
+            CommandExecutionException.class,
             () -> testCommand.validateOrgAndRepo("org", "")
         );
         
@@ -165,8 +165,8 @@ class BaseCommandTest {
 
     @Test
     void testCommandException_WithMessage() {
-        BaseCommand.CommandException exception = 
-            new BaseCommand.CommandException("Test error", 2);
+        CommandExecutionException exception = 
+            new CommandExecutionException("Test error", 2);
         
         assertEquals("Test error", exception.getMessage());
         assertEquals(2, exception.getExitCode());
@@ -175,12 +175,164 @@ class BaseCommandTest {
     @Test
     void testCommandException_WithCause() {
         Exception cause = new RuntimeException("Root cause");
-        BaseCommand.CommandException exception = 
-            new BaseCommand.CommandException("Test error", cause, 3);
+        CommandExecutionException exception = 
+            new CommandExecutionException("Test error", cause, 3);
         
         assertEquals("Test error", exception.getMessage());
         assertEquals(cause, exception.getCause());
         assertEquals(3, exception.getExitCode());
+    }
+
+    @Test
+    void testCreateClient_WithoutRemote() {
+        when(mockConfig.getMmsUrl()).thenReturn("http://localhost:8080");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("");
+        when(mockConfig.isLocalMode()).thenReturn(true);
+        when(mockConfig.getLocalUser()).thenReturn("root");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, false);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullRemote() {
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(null);
+        when(mockConfig.getMmsUrl()).thenReturn("http://localhost:8080");
+        when(mockConfig.isAuthEnabled()).thenReturn(false);
+        when(mockConfig.getSshKeyPath()).thenReturn(null);
+        when(mockConfig.isLocalMode()).thenReturn(true);
+        when(mockConfig.getLocalUser()).thenReturn("root");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("secret123456789012345678901234567890");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_LocalMode() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser("remoteuser");
+        mockRemote.setLocalJwtSecret("secret123456789012345678901234567890");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_AuthEnabled() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setAuthEnabled("true");
+        mockRemote.setSshKeyPath("/path/to/key");
+        mockRemote.setLocalMode("false");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullLocalUser() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser(null);
+        mockRemote.setLocalJwtSecret("secret123456789012345678901234567890");
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        when(mockConfig.getLocalUser()).thenReturn("defaultuser");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testCreateClient_WithRemote_NullLocalJwtSecret() {
+        Remote mockRemote = new Remote();
+        mockRemote.setUrl("http://remote.example.com");
+        mockRemote.setLocalMode("true");
+        mockRemote.setLocalUser("user");
+        mockRemote.setLocalJwtSecret(null);
+        
+        when(mockParent.getRemoteName()).thenReturn("origin");
+        when(mockConfig.getDefaultRemote()).thenReturn("origin");
+        when(mockConfig.getRemote("origin")).thenReturn(mockRemote);
+        when(mockConfig.getLocalUser()).thenReturn("defaultuser");
+        when(mockConfig.getLocalJwtSecret()).thenReturn("defaultsecret123456789012345678901234567890");
+        
+        FlexoMmsClient client = testCommand.createClient(mockConfig, true);
+        
+        assertNotNull(client);
+    }
+
+    @Test
+    void testHandleError_CommandException() {
+        CommandExecutionException exception = new CommandExecutionException("Test error", 1);
+        
+        assertThrows(CommandExecutionException.class, () -> {
+            testCommand.handleError(exception);
+        });
+    }
+
+    @Test
+    void testHandleError_GenericException() {
+        RuntimeException exception = new RuntimeException("Generic error");
+        
+        assertThrows(CommandExecutionException.class, () -> {
+            testCommand.handleError(exception);
+        });
+    }
+
+    @Test
+    void testRun_Success() {
+        testCommand.run();
+        
+        assertTrue(testCommand.wasExecuted);
+    }
+
+    @Test
+    void testRun_CommandException() {
+        testCommand.shouldThrowCommandException = true;
+        
+        assertThrows(CommandExecutionException.class, () -> {
+            testCommand.run();
+        });
+    }
+
+    @Test
+    void testRun_GenericException() {
+        testCommand.shouldThrowGenericException = true;
+        
+        assertThrows(CommandExecutionException.class, () -> {
+            testCommand.run();
+        });
+    }
+
+    @Test
+    void testGetConfig() {
+        FlexoCLI.setConfig(new FlexoConfig(false));
+        
+        FlexoConfig config = testCommand.getConfig();
+        
+        assertNotNull(config);
     }
 
     /**
@@ -195,7 +347,7 @@ class BaseCommandTest {
         @Override
         protected void executeCommand() throws Exception {
             if (shouldThrowCommandException) {
-                throw new CommandException("Command failed", 1);
+                throw new CommandExecutionException("Command failed", 1);
             }
             if (shouldThrowGenericException) {
                 throw new RuntimeException("Generic error");

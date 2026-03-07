@@ -74,30 +74,6 @@ public class AuthenticationHandler {
         if (secret.length() < 32) {
             logger.warn("SECURITY WARNING: local.jwtSecret is too short (minimum 32 characters recommended)");
         }
-
-        String[] weakSecrets = {
-            "devsecret",
-            "secret",
-            "password",
-            "changeme",
-            "test",
-            "dev",
-            "local"
-        };
-
-        String lowerSecret = secret.toLowerCase();
-        boolean isGenerated = secret.length() >= 64 && secret.matches("[A-Za-z0-9+/=]+");
-        if (isGenerated) {
-            return;
-        }
-
-        for (String weak : weakSecrets) {
-            if (lowerSecret.contains(weak)) {
-                logger.warn("SECURITY WARNING: local.jwtSecret appears to contain weak or default values");
-                logger.warn("Please use a strong, randomly generated secret for production use");
-                break;
-            }
-        }
     }
 
     /**

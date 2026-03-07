@@ -87,7 +87,7 @@ public class BranchCommand extends BaseCommand {
 
     private void createBranch(FlexoMmsClient client, String orgId, String repoId) throws Exception {
         if (branchName == null || branchName.isEmpty()) {
-            throw new CommandException("Branch name is required for creation", 1);
+            throw new CommandExecutionException("Branch name is required for creation", 1);
         }
 
         ConsoleUtil.info("Creating branch '" + branchName + "'...");
@@ -100,15 +100,15 @@ public class BranchCommand extends BaseCommand {
                 ConsoleUtil.info("Points to commit: " + branch.getCommitId());
             }
         } else {
-            throw new CommandException("Failed to create branch", 1);
+            throw new CommandExecutionException("Failed to create branch", 1);
         }
     }
 
     private void deleteBranch(FlexoMmsClient client, String orgId, String repoId) throws Exception {
         if (branchName == null || branchName.isEmpty()) {
-            throw new CommandException("Branch name is required for deletion", 1);
+            throw new CommandExecutionException("Branch name is required for deletion", 1);
         }
 
-        throw new CommandException("Branch deletion is not yet implemented in the MMS API", 1);
+        throw new CommandExecutionException("Branch deletion is not yet implemented in the MMS API", 1);
     }
 }

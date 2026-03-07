@@ -6,6 +6,8 @@ import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Remote;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Base class for all commands that provides common functionality:
@@ -19,30 +21,10 @@ import org.openmbee.flexo.cli.util.ConsoleUtil;
  */
 public abstract class BaseCommand implements Runnable {
 
+    private static final Logger logger = LoggerFactory.getLogger(BaseCommand.class);
+
     // Subclasses must annotate this field with @ParentCommand
     protected FlexoCLI parent;
-
-    /**
-     * Exception thrown when command execution fails.
-     * Contains exit code for proper CLI behavior.
-     */
-    public static class CommandException extends RuntimeException {
-        private final int exitCode;
-
-        public CommandException(String message, int exitCode) {
-            super(message);
-            this.exitCode = exitCode;
-        }
-
-        public CommandException(String message, Throwable cause, int exitCode) {
-            super(message, cause);
-            this.exitCode = exitCode;
-        }
-
-        public int getExitCode() {
-            return exitCode;
-        }
-    }
 
     /**
      * Get the configuration from FlexoCLI.
@@ -71,15 +53,15 @@ public abstract class BaseCommand implements Runnable {
 
     /**
      * Validate that org ID and repo ID are present.
-     * Throws CommandException if either is missing.
+     * Throws CommandExecutionException if either is missing.
      */
     protected void validateOrgAndRepo(String orgId, String repoId) {
         if (orgId == null || orgId.isEmpty()) {
-            throw new CommandException(
+            throw new CommandExecutionException(
                 "Organization ID is required. Use --org or set default.org in config", 1);
         }
         if (repoId == null || repoId.isEmpty()) {
-            throw new CommandException(
+            throw new CommandExecutionException(
                 "Repository ID is required. Use --repo or set default.repo in config", 1);
         }
     }
@@ -156,23 +138,23 @@ public abstract class BaseCommand implements Runnable {
     }
 
     /**
-     * Handle exceptions and convert to CommandException if needed.
+     * Handle exceptions and convert to CommandExecutionException if needed.
      * Logs verbose output if enabled.
      */
     protected void handleError(Exception e) {
-        String message = e instanceof CommandException ?
+        String message = e instanceof CommandExecutionException ?
             e.getMessage() : "Operation failed: " + e.getMessage();
 
         ConsoleUtil.error(message);
 
         if (parent != null && parent.isVerbose()) {
-            e.printStackTrace();
+            logger.error("Command execution failed", e);
         }
 
-        int exitCode = e instanceof CommandException ?
-            ((CommandException) e).getExitCode() : 1;
+        int exitCode = e instanceof CommandExecutionException ?
+            ((CommandExecutionException) e).getExitCode() : 1;
 
-        throw new CommandException(message, e, exitCode);
+        throw new CommandExecutionException(message, e, exitCode);
     }
 
     /**
@@ -183,7 +165,7 @@ public abstract class BaseCommand implements Runnable {
     public void run() {
         try {
             executeCommand();
-        } catch (CommandException e) {
+        } catch (CommandExecutionException e) {
             // Already handled, just propagate
             throw e;
         } catch (Exception e) {

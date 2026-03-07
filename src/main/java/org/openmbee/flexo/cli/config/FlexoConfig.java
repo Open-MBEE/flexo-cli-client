@@ -32,8 +32,16 @@ public class FlexoConfig {
         loadConfiguration();
     }
 
-    private void loadConfiguration() {
-        // 1. Load default properties from resources
+    public FlexoConfig(boolean loadUserConfig) {
+        this.properties = new Properties();
+        loadDefaultProperties();
+        if (loadUserConfig) {
+            loadUserConfig();
+        }
+        overrideWithEnvironment();
+    }
+
+    private void loadDefaultProperties() {
         try (InputStream defaultStream = getClass().getResourceAsStream(DEFAULT_PROPERTIES)) {
             if (defaultStream != null) {
                 properties.load(defaultStream);
@@ -42,8 +50,9 @@ public class FlexoConfig {
         } catch (IOException e) {
             logger.warn("Could not load default properties: {}", e.getMessage());
         }
+    }
 
-        // 2. Load user config file if it exists
+    private void loadUserConfig() {
         Path userConfigPath = getUserConfigPath();
         if (Files.exists(userConfigPath)) {
             try (InputStream userStream = Files.newInputStream(userConfigPath)) {
@@ -53,8 +62,11 @@ public class FlexoConfig {
                 logger.warn("Could not load user config: {}", e.getMessage());
             }
         }
+    }
 
-        // 3. Override with environment variables
+    private void loadConfiguration() {
+        loadDefaultProperties();
+        loadUserConfig();
         overrideWithEnvironment();
     }
 
@@ -162,32 +174,12 @@ public class FlexoConfig {
         return get("local.user", "root");
     }
 
-    public String getLocalJwtSecret() {
-        String secret = get("local.jwtSecret");
-        
-        // If no secret is configured, generate and save one
-        if (secret == null || secret.isEmpty()) {
-            secret = generateJwtSecret();
-            set("local.jwtSecret", secret);
-            try {
-                save();
-                logger.info("Generated and saved new JWT secret");
-            } catch (IOException e) {
-                logger.warn("Failed to save generated JWT secret: {}", e.getMessage());
-            }
-        }
-        
-        return secret;
-    }
-    
     /**
-     * Generate a secure random JWT secret (64 characters, base64-encoded)
+     * Get the hardcoded JWT secret for local development.
+     * This secret is fixed and must match the JWT_SECRET in the layer1-service container.
      */
-    private String generateJwtSecret() {
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        byte[] bytes = new byte[48]; // 48 bytes = 64 base64 characters
-        random.nextBytes(bytes);
-        return java.util.Base64.getEncoder().encodeToString(bytes);
+    public String getLocalJwtSecret() {
+        return "devsecretpleasechangeinproduction1234567890";
     }
 
     // Remote management methods

@@ -84,4 +84,69 @@ class RemoteTest {
         assertTrue(str.contains("origin"));
         assertTrue(str.contains("http://localhost:8080"));
     }
+
+    @Test
+    void testRemoteHashCode() {
+        Remote remote1 = new Remote("origin", "http://localhost:8080");
+        Remote remote2 = new Remote("origin", "http://different-url.com");
+        
+        assertEquals(remote1.hashCode(), remote2.hashCode());
+    }
+
+    @Test
+    void testRemoteHashCodeDifferent() {
+        Remote remote1 = new Remote("origin", "http://localhost:8080");
+        Remote remote2 = new Remote("production", "http://localhost:8080");
+        
+        assertNotEquals(remote1.hashCode(), remote2.hashCode());
+    }
+
+    @Test
+    void testRemoteEqualsSame() {
+        Remote remote = new Remote("test", "http://test.com");
+        
+        assertEquals(remote, remote);
+    }
+
+    @Test
+    void testRemoteEqualsNull() {
+        Remote remote = new Remote("test", "http://test.com");
+        
+        assertNotEquals(remote, null);
+    }
+
+    @Test
+    void testRemoteEqualsDifferentClass() {
+        Remote remote = new Remote("test", "http://test.com");
+        
+        assertNotEquals(remote, "not a remote");
+    }
+
+    @Test
+    void testDefaultConstructor() {
+        Remote remote = new Remote();
+        
+        assertNotNull(remote);
+    }
+
+    @Test
+    void testSetAndGetAllFields() {
+        Remote remote = new Remote();
+        
+        remote.setName("test");
+        remote.setUrl("http://test.com");
+        remote.setAuthEnabled("true");
+        remote.setSshKeyPath("/path/to/key");
+        remote.setLocalMode("true");
+        remote.setLocalUser("user");
+        remote.setLocalJwtSecret("secret");
+        
+        assertEquals("test", remote.getName());
+        assertEquals("http://test.com", remote.getUrl());
+        assertEquals("true", remote.getAuthEnabled());
+        assertEquals("/path/to/key", remote.getSshKeyPath());
+        assertEquals("true", remote.getLocalMode());
+        assertEquals("user", remote.getLocalUser());
+        assertEquals("secret", remote.getLocalJwtSecret());
+    }
 }

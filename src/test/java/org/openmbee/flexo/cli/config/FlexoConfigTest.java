@@ -263,4 +263,41 @@ class FlexoConfigTest {
         config.set("test.bool3", "FALSE");
         assertFalse(config.getBoolean("test.bool3", true));
     }
+
+    @Test
+    void testIsLocalModeDefault() {
+        FlexoConfig config = new FlexoConfig();
+        
+        assertTrue(config.isLocalMode());
+    }
+
+    @Test
+    void testIsLocalModeDisabled() {
+        FlexoConfig config = new FlexoConfig();
+        config.set("local.mode", "false");
+        
+        assertFalse(config.isLocalMode());
+    }
+
+    @Test
+    void testGetLocalUserDefault() {
+        FlexoConfig config = new FlexoConfig();
+        
+        assertEquals("root", config.getLocalUser());
+    }
+
+    @Test
+    void testGetLocalUserCustom() {
+        FlexoConfig config = new FlexoConfig();
+        config.set("local.user", "customuser");
+        
+        assertEquals("customuser", config.getLocalUser());
+    }
+
+    @Test
+    void testGetLocalJwtSecret() {
+        FlexoConfig config = new FlexoConfig();
+        
+        assertEquals("devsecretpleasechangeinproduction1234567890", config.getLocalJwtSecret());
+    }
 }

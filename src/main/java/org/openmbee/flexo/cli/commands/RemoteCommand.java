@@ -8,6 +8,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 import picocli.CommandLine.ParentCommand;
 
+import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -107,7 +108,7 @@ public class RemoteCommand implements Runnable {
             if (config.hasRemote(name)) {
                 ConsoleUtil.error("Remote '" + name + "' already exists");
                 ConsoleUtil.info("Use 'flexo remote set-url " + name + " <url>' to update URL");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + name + "' already exists", 1);
             }
 
             // Create and configure remote
@@ -140,9 +141,9 @@ public class RemoteCommand implements Runnable {
                 if (setDefault) {
                     ConsoleUtil.info("Set as default remote");
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 ConsoleUtil.error("Failed to save configuration: " + e.getMessage());
-                System.exit(1);
+                throw new CommandExecutionException("Failed to save configuration: " + e.getMessage(), e, 1);
             }
         }
     }
@@ -166,7 +167,7 @@ public class RemoteCommand implements Runnable {
 
             if (!config.hasRemote(name)) {
                 ConsoleUtil.error("Remote '" + name + "' does not exist");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + name + "' does not exist", 1);
             }
 
             config.removeRemote(name);
@@ -174,9 +175,9 @@ public class RemoteCommand implements Runnable {
             try {
                 config.save();
                 ConsoleUtil.success("Remote '" + name + "' removed");
-            } catch (Exception e) {
+            } catch (IOException e) {
                 ConsoleUtil.error("Failed to save configuration: " + e.getMessage());
-                System.exit(1);
+                throw new CommandExecutionException("Failed to save configuration: " + e.getMessage(), e, 1);
             }
         }
     }
@@ -204,7 +205,7 @@ public class RemoteCommand implements Runnable {
             if (remote == null) {
                 ConsoleUtil.error("Remote '" + name + "' does not exist");
                 ConsoleUtil.info("Use 'flexo remote add " + name + " <url>' to create it");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + name + "' does not exist", 1);
             }
 
             remote.setUrl(url);
@@ -213,9 +214,9 @@ public class RemoteCommand implements Runnable {
             try {
                 config.save();
                 ConsoleUtil.success("Remote '" + name + "' URL updated: " + url);
-            } catch (Exception e) {
+            } catch (IOException e) {
                 ConsoleUtil.error("Failed to save configuration: " + e.getMessage());
-                System.exit(1);
+                throw new CommandExecutionException("Failed to save configuration: " + e.getMessage(), e, 1);
             }
         }
     }
@@ -239,7 +240,7 @@ public class RemoteCommand implements Runnable {
             Remote remote = config.getRemote(name);
             if (remote == null) {
                 ConsoleUtil.error("Remote '" + name + "' does not exist");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + name + "' does not exist", 1);
             }
 
             String defaultRemote = config.getDefaultRemote();
@@ -282,12 +283,12 @@ public class RemoteCommand implements Runnable {
             Remote remote = config.getRemote(oldName);
             if (remote == null) {
                 ConsoleUtil.error("Remote '" + oldName + "' does not exist");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + oldName + "' does not exist", 1);
             }
 
             if (config.hasRemote(newName)) {
                 ConsoleUtil.error("Remote '" + newName + "' already exists");
-                System.exit(1);
+                throw new CommandExecutionException("Remote '" + newName + "' already exists", 1);
             }
 
             // Create new remote with new name
@@ -303,9 +304,9 @@ public class RemoteCommand implements Runnable {
             try {
                 config.save();
                 ConsoleUtil.success("Remote renamed: " + oldName + " -> " + newName);
-            } catch (Exception e) {
+            } catch (IOException e) {
                 ConsoleUtil.error("Failed to save configuration: " + e.getMessage());
-                System.exit(1);
+                throw new CommandExecutionException("Failed to save configuration: " + e.getMessage(), e, 1);
             }
         }
     }
