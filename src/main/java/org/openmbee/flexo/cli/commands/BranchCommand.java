@@ -25,6 +25,11 @@ public class BranchCommand extends BaseCommand {
     @ParentCommand
     protected FlexoCLI parent;
 
+    @Override
+    protected FlexoCLI getParentCli() {
+        return parent;
+    }
+
     @Option(names = {"-l", "--list"}, description = "List all branches")
     private boolean list = false;
 

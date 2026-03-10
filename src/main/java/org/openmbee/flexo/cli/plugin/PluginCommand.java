@@ -120,4 +120,15 @@ public abstract class PluginCommand implements Runnable {
             ConsoleUtil.debug(message);
         }
     }
+
+    /**
+     * Get the remote name from the parent Flexo CLI, if provided.
+     *
+     * This exposes the global --remote flag to plugin commands.
+     *
+     * @return remote name or null if not set
+     */
+    protected String getRemoteName() {
+        return context != null ? context.getRemoteName() : null;
+    }
 }

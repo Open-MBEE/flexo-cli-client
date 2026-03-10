@@ -20,6 +20,11 @@ public class RmCommand extends BaseCommand {
     @ParentCommand
     protected FlexoCLI parent;
 
+    @Override
+    protected FlexoCLI getParentCli() {
+        return parent;
+    }
+
     @Option(names = {"-i", "--iri"}, description = "IRI of element to remove")
     private String iri;
 

@@ -22,6 +22,11 @@ public class MergeCommand extends BaseCommand {
     @ParentCommand
     protected FlexoCLI parent;
 
+    @Override
+    protected FlexoCLI getParentCli() {
+        return parent;
+    }
+
     @Option(names = {"-s", "--source"}, description = "Source branch", required = true)
     private String sourceBranch;
 

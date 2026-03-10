@@ -64,16 +64,23 @@ startScripts {
     applicationName = 'flexo'
 }
 
-// Task to generate a fat JAR
+// Task to generate a fat JAR (exclude signing files from deps to avoid SecurityException)
 tasks.register('fatJar', Jar) {
     archiveClassifier = 'all'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {
         attributes 'Main-Class': 'org.openmbee.flexo.cli.FlexoCLI'
     }
+    // Unpack runtime classpath but drop all META-INF signature files so the
+    // resulting fat JAR is not "partially signed" (which breaks jar verification).
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.collect { file ->
+            file.isDirectory() ? file : zipTree(file).matching {
+                exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC'
+            }
+        }
     }
+    // Also include this project's compiled classes/resources
     with jar
 }
 

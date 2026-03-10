@@ -1,6 +1,7 @@
 package org.openmbee.flexo.cli.config;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openmbee.flexo.cli.model.Remote;
@@ -20,11 +21,23 @@ class FlexoConfigRemoteTest {
     @TempDir
     Path tempDir;
 
+    private String originalUserHome;
     private FlexoConfig config;
 
     @BeforeEach
     void setUp() {
-        config = new FlexoConfig(false);
+        // Use an isolated temporary home directory so tests are not
+        // affected by the user's real ~/.flexo/config remotes.
+        originalUserHome = System.getProperty("user.home");
+        System.setProperty("user.home", tempDir.toString());
+        config = new FlexoConfig();
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (originalUserHome != null) {
+            System.setProperty("user.home", originalUserHome);
+        }
     }
 
     @Test
