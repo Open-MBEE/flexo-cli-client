@@ -175,6 +175,14 @@ public class FlexoConfig {
     }
 
     /**
+     * Get pre-existing Bearer token for remote servers (auth.remote).
+     * Used when the remote expects a pre-issued token rather than local HMAC JWT.
+     */
+    public String getAuthRemote() {
+        return get("auth.remote");
+    }
+
+    /**
      * Get the hardcoded JWT secret for local development.
      * This secret is fixed and must match the JWT_SECRET in the layer1-service container.
      */
@@ -206,10 +214,11 @@ public class FlexoConfig {
             remote.setUrl(get("remote." + name + ".url"));
             remote.setAuthEnabled(get("remote." + name + ".authEnabled"));
             remote.setSshKeyPath(get("remote." + name + ".sshKeyPath"));
-            remote.setLocalMode(get("remote." + name + ".localMode"));
-            remote.setLocalUser(get("remote." + name + ".localUser"));
-            remote.setLocalJwtSecret(get("remote." + name + ".localJwtSecret"));
-            remotes.put(name, remote);
+        remote.setLocalMode(get("remote." + name + ".localMode"));
+        remote.setLocalUser(get("remote." + name + ".localUser"));
+        remote.setLocalJwtSecret(get("remote." + name + ".localJwtSecret"));
+        remote.setAuthToken(get("remote." + name + ".authToken"));
+        remotes.put(name, remote);
         }
         
         return remotes;
@@ -232,6 +241,7 @@ public class FlexoConfig {
         remote.setLocalMode(get("remote." + name + ".localMode"));
         remote.setLocalUser(get("remote." + name + ".localUser"));
         remote.setLocalJwtSecret(get("remote." + name + ".localJwtSecret"));
+        remote.setAuthToken(get("remote." + name + ".authToken"));
         
         return remote;
     }
@@ -257,6 +267,9 @@ public class FlexoConfig {
         }
         if (remote.getLocalJwtSecret() != null) {
             set(prefix + ".localJwtSecret", remote.getLocalJwtSecret());
+        }
+        if (remote.getAuthToken() != null) {
+            set(prefix + ".authToken", remote.getAuthToken());
         }
     }
 

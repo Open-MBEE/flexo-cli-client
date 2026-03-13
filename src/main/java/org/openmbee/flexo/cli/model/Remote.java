@@ -14,6 +14,8 @@ public class Remote {
     private String localMode;
     private String localUser;
     private String localJwtSecret;
+    /** Pre-existing Bearer token for remote servers (e.g. auth.remote or remote.<name>.authToken) */
+    private String authToken;
 
     public Remote() {
     }
@@ -77,6 +79,14 @@ public class Remote {
 
     public void setLocalJwtSecret(String localJwtSecret) {
         this.localJwtSecret = localJwtSecret;
+    }
+
+    public String getAuthToken() {
+        return authToken;
+    }
+
+    public void setAuthToken(String authToken) {
+        this.authToken = authToken;
     }
 
     public boolean isAuthEnabledBoolean() {

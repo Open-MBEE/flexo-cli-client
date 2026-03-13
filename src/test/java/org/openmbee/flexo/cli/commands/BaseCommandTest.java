@@ -10,8 +10,6 @@ import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Remote;
 import picocli.CommandLine;
 
-import java.lang.reflect.Field;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -32,11 +30,8 @@ class BaseCommandTest {
     void setUp() throws Exception {
         MockitoAnnotations.openMocks(this);
         testCommand = new TestCommand();
-        
-        // Set parent via reflection since it's protected
-        Field parentField = BaseCommand.class.getDeclaredField("parent");
-        parentField.setAccessible(true);
-        parentField.set(testCommand, mockParent);
+        // Inject mocked parent CLI into the test command
+        testCommand.parent = mockParent;
     }
 
     @Test
@@ -340,6 +335,14 @@ class BaseCommandTest {
      */
     @CommandLine.Command(name = "test")
     static class TestCommand extends BaseCommand {
+        // Simulated parent CLI instance for tests
+        FlexoCLI parent;
+
+        @Override
+        protected FlexoCLI getParentCli() {
+            return parent;
+        }
+
         boolean wasExecuted = false;
         boolean shouldThrowCommandException = false;
         boolean shouldThrowGenericException = false;

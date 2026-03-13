@@ -26,6 +26,11 @@ public class PushCommand extends BaseCommand {
     @ParentCommand
     protected FlexoCLI parent;
 
+    @Override
+    protected FlexoCLI getParentCli() {
+        return parent;
+    }
+
     @Option(names = {"-b", "--branch"}, description = "Branch name")
     private String branchName;
 

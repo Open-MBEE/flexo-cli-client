@@ -96,4 +96,15 @@ public class PluginContext {
     public String getMmsUrl() {
         return config.getMmsUrl();
     }
+
+    /**
+     * Get the remote name from command line or config.
+     *
+     * This corresponds to the global --remote option on the Flexo CLI.
+     *
+     * @return remote name or null if not set
+     */
+    public String getRemoteName() {
+        return parentCommand != null ? parentCommand.getRemoteName() : null;
+    }
 }

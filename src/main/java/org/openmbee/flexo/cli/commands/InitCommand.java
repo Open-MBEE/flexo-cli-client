@@ -10,6 +10,7 @@ import org.openmbee.flexo.cli.FlexoCLI;
 import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
+import org.openmbee.flexo.cli.model.Remote;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,7 +99,26 @@ public class InitCommand implements Runnable {
         String orgId = parent.getOrgId() != null ? parent.getOrgId() : "localorg";
         String repoId = parent.getRepoId() != null ? parent.getRepoId() : "localrepo";
 
-        ConsoleUtil.info("Initializing Flexo MMS at " + config.getMmsUrl());
+        // Init is local-only: do not allow --remote here
+        String remoteName = parent.getRemoteName();
+        if (remoteName != null && !remoteName.isEmpty()) {
+            ConsoleUtil.error("The 'init' command only supports the local Flexo MMS instance.");
+            ConsoleUtil.error("Please run 'flexo init' without --remote. Use pull/push/clone for remotes.");
+            System.exit(1);
+            return;
+        }
+
+        // Resolve MMS URL and auth for local instance
+        String mmsUrl = config.getMmsUrl();
+        AuthenticationHandler authHandler = new AuthenticationHandler(
+                config.isAuthEnabled(),
+                config.getSshKeyPath(),
+                config.isLocalMode(),
+                config.getLocalUser(),
+                config.getLocalJwtSecret()
+        );
+
+        ConsoleUtil.info("Initializing Flexo MMS at " + mmsUrl);
         ConsoleUtil.info("This will:");
         if (!skipDocker) {
             ConsoleUtil.info("  0. Start Docker services (Fuseki and MMS Layer 1)");
@@ -109,23 +129,17 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("     (master branch is created automatically by the service)");
 
         try {
+            // Step 0: Start Docker services (only for local instance)
             if (!skipDocker) {
                 startFuseki();
                 loadClusterConfig(config.getMmsUrl());
                 startLayer1Service(config.getMmsUrl());
             }
 
-            AuthenticationHandler authHandler = new AuthenticationHandler(
-                    config.isAuthEnabled(),
-                    config.getSshKeyPath(),
-                    config.isLocalMode(),
-                    config.getLocalUser(),
-                    config.getLocalJwtSecret()
-            );
-
-            try (FlexoMmsClient client = new FlexoMmsClient(config.getMmsUrl(), authHandler)) {
+            try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler)) {
                 if (skipDocker) {
-                    generateAndLoadClusterConfig(client, config.getMmsUrl());
+                    // When Docker is skipped, ensure cluster configuration is loaded via HTTP
+                    generateAndLoadClusterConfig(client, mmsUrl);
                 }
 
                 createOrg(client, orgId);
@@ -244,21 +258,27 @@ public class InitCommand implements Runnable {
         ConsoleUtil.warn("  layer1-service check timed out, proceeding anyway...");
     }
 
-    private boolean runDockerCompose(java.io.File composeFile) throws IOException, InterruptedException {
-        String[][] commandVariants = new String[][] {
-            new String[] { DOCKER, "compose" },
-            new String[] { "docker-compose" }
-        };
+    private boolean runDockerCompose(java.io.File composeFile) throws Exception {
+        String[] commands = new String[]{"docker compose", "docker-compose"};
+        Exception lastStartError = null;
 
-        for (String[] cmdParts : commandVariants) {
-            ProcessBuilder pb = new ProcessBuilder(cmdParts);
-            pb.command().add("-f");
-            pb.command().add(composeFile.getAbsolutePath());
-            pb.command().add("up");
-            pb.command().add("-d");
+        for (String command : commands) {
+            String[] cmdParts = command.split(" ", -1);
+            // "docker compose" -> [docker, compose]; "docker-compose" -> [docker-compose]
+            String[] args = cmdParts.length >= 2
+                    ? new String[]{cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d"}
+                    : new String[]{cmdParts[0], "-f", composeFile.getAbsolutePath(), "up", "-d"};
+            ProcessBuilder pb = new ProcessBuilder(args);
             pb.redirectErrorStream(true);
 
-            Process process = pb.start();
+            Process process;
+            try {
+                process = pb.start();
+            } catch (java.io.IOException e) {
+                // This command not found (e.g. no "docker-compose" binary); try next
+                lastStartError = e;
+                continue;
+            }
 
             try (java.io.BufferedReader reader = new java.io.BufferedReader(
                     new java.io.InputStreamReader(process.getInputStream()))) {
@@ -274,9 +294,18 @@ public class InitCommand implements Runnable {
             if (exitCode == 0) {
                 return true;
             }
+            // Command ran but failed; do not try the other (e.g. docker-compose not installed)
+            throw new Exception("Docker Compose failed with exit code " + exitCode
+                    + ". Ensure Docker is running and check the compose file. Try: docker compose -f "
+                    + composeFile.getAbsolutePath() + " up -d");
         }
 
-        return false;
+        // Neither command could be started
+        String msg = "Docker Compose not found. Install Docker Desktop (includes 'docker compose') or install docker-compose.";
+        if (lastStartError != null) {
+            msg += " " + lastStartError.getMessage();
+        }
+        throw new Exception(msg);
     }
 
     private java.io.File extractDockerComposeFromClasspath() throws ConfigurationException, IOException {
