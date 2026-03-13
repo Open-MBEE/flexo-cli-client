@@ -14,7 +14,8 @@
     </root>
 
     <!-- Flexo CLI logging -->
-    <logger name="org.openmbee.flexo.cli" level="INFO" />
+    <logger name="org.openmbee.flexo.cli" level="DEBUG" />
+    <logger name="org.openmbee.flexo.cli.client.AuthenticationHandler" level="DEBUG" />
 
     <!-- Apache HTTP Client logging (set to WARN to reduce noise) -->
     <logger name="org.apache.hc" level="WARN" />
