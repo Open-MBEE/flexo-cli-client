@@ -76,6 +76,8 @@ remote.production.sshKeyPath=~/.ssh/production_rsa
 # remote.<name>.localMode          - Enable local development mode
 # remote.<name>.localUser          - User name for local mode
 # remote.<name>.localJwtSecret     - JWT secret for local mode
+# remote.<name>.authToken          - Pre-existing Bearer token (e.g. "Bearer <jwt>")
+# auth.remote                      - Global Bearer token fallback for remotes
 #
 # Authentication Priority:
 # -----------------------
@@ -94,6 +96,10 @@ remote.production.sshKeyPath=~/.ssh/production_rsa
 #   - Set localMode=false
 #   - Set authEnabled=true
 #   - Provide sshKeyPath
+#
+# Bearer Token (JWT):
+#   - Set remote.<name>.authToken=Bearer <your-token> for remote-specific token
+#   - Or auth.remote=Bearer <your-token> for global fallback
 #
 # Managing Remotes:
 # -----------------

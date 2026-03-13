@@ -35,6 +35,8 @@ public class AuthenticationHandler {
     private final boolean localMode;
     private final String localUser;
     private final String localJwtSecret;
+    /** Pre-existing Bearer token (when set, used directly instead of generating JWT) */
+    private final String bearerToken;
     private PrivateKey privateKey;
     private String cachedToken;
     private Instant tokenExpiry;
@@ -44,18 +46,27 @@ public class AuthenticationHandler {
     }
 
     public AuthenticationHandler(boolean enabled, String sshKeyPath, boolean localMode, String localUser, String localJwtSecret) {
+        this(enabled, sshKeyPath, localMode, localUser, localJwtSecret, null);
+    }
+
+    /**
+     * Create handler with optional pre-existing Bearer token.
+     * When bearerToken is non-null, it is used directly instead of generating JWT.
+     */
+    public AuthenticationHandler(boolean enabled, String sshKeyPath, boolean localMode, String localUser, String localJwtSecret, String bearerToken) {
         this.enabled = enabled;
         this.sshKeyPath = sshKeyPath;
         this.localMode = localMode;
         this.localUser = localUser;
         this.localJwtSecret = localJwtSecret;
+        this.bearerToken = bearerToken;
 
-        // Validate JWT secret in local mode
-        if (localMode) {
+        // Validate JWT secret in local mode (skip when using bearer token)
+        if (localMode && bearerToken == null) {
             validateJwtSecret(localJwtSecret);
         }
 
-        if (enabled && !localMode) {
+        if (enabled && !localMode && bearerToken == null) {
             loadPrivateKey();
         }
     }
@@ -109,6 +120,9 @@ public class AuthenticationHandler {
      * Returns cached token if still valid, otherwise generates new one
      */
     public String getToken() {
+        if (bearerToken != null && !bearerToken.isEmpty()) {
+            return bearerToken.startsWith("Bearer ") ? bearerToken.substring(7) : bearerToken;
+        }
         if (!enabled && !localMode) {
             return null;
         }
@@ -186,6 +200,9 @@ public class AuthenticationHandler {
      * Get Authorization header value
      */
     public String getAuthorizationHeader() {
+        if (bearerToken != null && !bearerToken.isEmpty()) {
+            return bearerToken.startsWith("Bearer ") ? bearerToken : "Bearer " + bearerToken;
+        }
         if (!enabled && !localMode) {
             return null;
         }
@@ -207,6 +224,6 @@ public class AuthenticationHandler {
     }
 
     public boolean isEnabled() {
-        return enabled || localMode;
+        return bearerToken != null && !bearerToken.isEmpty() || enabled || localMode;
     }
 }

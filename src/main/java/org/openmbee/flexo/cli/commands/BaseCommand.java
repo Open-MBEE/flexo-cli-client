@@ -16,15 +16,15 @@ import org.slf4j.LoggerFactory;
  * - FlexoMmsClient creation
  * - Org/Repo validation
  * - Exception-based error handling
- * 
- * Subclasses should add @ParentCommand annotation to their parent field.
  */
 public abstract class BaseCommand implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(BaseCommand.class);
 
-    // Subclasses must annotate this field with @ParentCommand
-    protected FlexoCLI parent;
+    /**
+     * Subclasses must provide access to the FlexoCLI parent annotated with @ParentCommand.
+     */
+    protected abstract FlexoCLI getParentCli();
 
     /**
      * Get the configuration from FlexoCLI.
@@ -39,6 +39,7 @@ public abstract class BaseCommand implements Runnable {
      * @return The resolved org ID
      */
     protected String getOrgId(FlexoConfig config) {
+        FlexoCLI parent = getParentCli();
         return parent != null && parent.getOrgId() != null ? parent.getOrgId() : config.getDefaultOrg();
     }
 
@@ -48,6 +49,7 @@ public abstract class BaseCommand implements Runnable {
      * @return The resolved repo ID
      */
     protected String getRepoId(FlexoConfig config) {
+        FlexoCLI parent = getParentCli();
         return parent != null && parent.getRepoId() != null ? parent.getRepoId() : config.getDefaultRepo();
     }
 
@@ -92,6 +94,9 @@ public abstract class BaseCommand implements Runnable {
         boolean localMode;
         String localUser;
         String localJwtSecret;
+        String bearerToken = null;
+
+        FlexoCLI parent = getParentCli();
 
         if (useRemote) {
             String remoteName = parent != null && parent.getRemoteName() != null ?
@@ -107,6 +112,7 @@ public abstract class BaseCommand implements Runnable {
                     remote.getLocalUser() : config.getLocalUser();
                 localJwtSecret = remote.getLocalJwtSecret() != null ?
                     remote.getLocalJwtSecret() : config.getLocalJwtSecret();
+                bearerToken = remote.getAuthToken() != null ? remote.getAuthToken() : config.getAuthRemote();
             } else {
                 mmsUrl = config.getMmsUrl();
                 authEnabled = config.isAuthEnabled();
@@ -114,6 +120,7 @@ public abstract class BaseCommand implements Runnable {
                 localMode = config.isLocalMode();
                 localUser = config.getLocalUser();
                 localJwtSecret = config.getLocalJwtSecret();
+                bearerToken = config.getAuthRemote();
             }
         } else {
             mmsUrl = config.getMmsUrl();
@@ -131,7 +138,8 @@ public abstract class BaseCommand implements Runnable {
             sshKeyPath,
             localMode,
             localUser,
-            localJwtSecret
+            localJwtSecret,
+            bearerToken
         );
 
         return new FlexoMmsClient(mmsUrl, authHandler);
@@ -147,6 +155,7 @@ public abstract class BaseCommand implements Runnable {
 
         ConsoleUtil.error(message);
 
+        FlexoCLI parent = getParentCli();
         if (parent != null && parent.isVerbose()) {
             logger.error("Command execution failed", e);
         }
