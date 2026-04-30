@@ -10,6 +10,8 @@ import org.openmbee.flexo.cli.FlexoCLI;
 import org.openmbee.flexo.cli.client.AuthenticationHandler;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
 import org.openmbee.flexo.cli.config.FlexoConfig;
+import org.openmbee.flexo.cli.container.ContainerException;
+import org.openmbee.flexo.cli.container.ContainerServiceHelper;
 import org.openmbee.flexo.cli.model.Remote;
 import org.openmbee.flexo.cli.util.ConsoleUtil;
 import org.slf4j.Logger;
@@ -20,65 +22,26 @@ import picocli.CommandLine.ParentCommand;
 
 /**
  * Init command - Initialize a local Flexo MMS instance with default org and repo
- * Automatically starts Docker services and sets up the complete environment
+ * Automatically starts container services and sets up the complete environment
+ * Supports Docker, Podman, and Colima container runtimes
  */
 @Command(
         name = "init",
-        description = "Initialize local Flexo MMS (starts Docker, creates org 'localorg' and repo 'localrepo')",
+        description = "Initialize local Flexo MMS (starts containers, creates org 'localorg' and repo 'localrepo')",
         mixinStandardHelpOptions = true
 )
 public class InitCommand implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(InitCommand.class);
 
-    private static final String DOCKER = "docker";
     private static final String DOCKER_COMPOSE_FILE = "flexo-mms-docker-compose.yml";
     private static final String FUSEKI = "Fuseki";
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
     private static final String CONTENT_TYPE_TRIG = "application/trig";
     private static final String CONTENT_TYPE_TURTLE = "text/turtle";
     private static final String MSG_WAITING_FOR = "  Waiting for ";
-
-    private void waitForService(String name, int port, String logMessage, String errorMessage) throws InterruptedException, DockerException {
-        int maxAttempts = 30;
-        int attempt = 0;
-        ConsoleUtil.info(MSG_WAITING_FOR + logMessage + "...");
-        while (attempt < maxAttempts) {
-            try (java.net.Socket socket = new java.net.Socket()) {
-                socket.connect(new java.net.InetSocketAddress("localhost", port), 1000);
-                ConsoleUtil.success("  " + name + " is ready");
-                return;
-            } catch (java.net.ConnectException | java.net.SocketTimeoutException e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new DockerException(errorMessage);
-                }
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw ie;
-                }
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug(MSG_WAITING_FOR + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            } catch (IOException e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new DockerException(errorMessage, e);
-                }
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw ie;
-                }
-                if (parent.isVerbose()) {
-                    ConsoleUtil.debug(MSG_WAITING_FOR + name + "... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
-    }
+    
+    private ContainerServiceHelper containerHelper;
 
     @ParentCommand
     private FlexoCLI parent;
@@ -89,7 +52,7 @@ public class InitCommand implements Runnable {
     @Option(names = {"--force"}, description = "Force initialization even if resources exist")
     private boolean force = false;
 
-    @Option(names = {"--skip-docker"}, description = "Skip Docker services startup (assumes services already running)")
+    @Option(names = {"--skip-docker"}, description = "Skip container startup (assumes services already running on default ports: Fuseki on 3030, layer1-service on 8080)")
     private boolean skipDocker = false;
 
     @Override
@@ -117,11 +80,26 @@ public class InitCommand implements Runnable {
                 config.getLocalUser(),
                 config.getLocalJwtSecret()
         );
+        
+        // Initialize container helper if not skipping Docker
+        if (!skipDocker) {
+            try {
+                containerHelper = new ContainerServiceHelper(config, parent.isVerbose());
+                ConsoleUtil.info("Using container runtime: " + containerHelper.getRuntimeInfo());
+            } catch (ContainerException e) {
+                ConsoleUtil.error("Failed to initialize container runtime: " + e.getMessage());
+                ConsoleUtil.error("Install Docker/Podman/Colima or use --skip-docker if services are already running");
+                if (parent.isVerbose()) {
+                    logger.error("Container runtime initialization failed", e);
+                }
+                throw new CommandExecutionException("Container runtime not available", e, e.getExitCode());
+            }
+        }
 
         ConsoleUtil.info("Initializing Flexo MMS at " + mmsUrl);
         ConsoleUtil.info("This will:");
         if (!skipDocker) {
-            ConsoleUtil.info("  0. Start Docker services (Fuseki and MMS Layer 1)");
+            ConsoleUtil.info("  0. Start container services (Fuseki and MMS Layer 1)");
         }
         ConsoleUtil.info("  1. Generate and load cluster configuration (users, policies)");
         ConsoleUtil.info("  2. Create org: " + orgId);
@@ -129,7 +107,7 @@ public class InitCommand implements Runnable {
         ConsoleUtil.info("     (master branch is created automatically by the service)");
 
         try {
-            // Step 0: Start Docker services (only for local instance)
+            // Step 0: Start container services (only for local instance)
             if (!skipDocker) {
                 startFuseki();
                 loadClusterConfig(config.getMmsUrl());
@@ -138,7 +116,7 @@ public class InitCommand implements Runnable {
 
             try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler)) {
                 if (skipDocker) {
-                    // When Docker is skipped, ensure cluster configuration is loaded via HTTP
+                    // When containers are skipped, ensure cluster configuration is loaded via HTTP
                     generateAndLoadClusterConfig(client, mmsUrl);
                 }
 
@@ -165,6 +143,12 @@ public class InitCommand implements Runnable {
                 logger.error("Initialization failed", e);
             }
             throw new CommandExecutionException("Initialization failed: " + e.getMessage(), e, e.getExitCode());
+        } catch (ContainerException e) {
+            ConsoleUtil.error("Container operation failed: " + e.getMessage());
+            if (parent.isVerbose()) {
+                logger.error("Container operation failed", e);
+            }
+            throw new CommandExecutionException("Container operation failed: " + e.getMessage(), e, e.getExitCode());
         } catch (Exception e) {
             ConsoleUtil.error("Initialization failed: " + e.getMessage());
             if (parent.isVerbose()) {
@@ -174,26 +158,21 @@ public class InitCommand implements Runnable {
         }
     }
 
-    private void startFuseki() throws ConfigurationException, DockerException, InterruptedException, IOException {
+    private void startFuseki() throws ConfigurationException, ContainerException, InterruptedException, IOException {
         ConsoleUtil.info("Starting Fuseki (quad-store-server)...");
 
-        java.io.File composeFile = extractDockerComposeFromClasspath();
-        if (composeFile == null) {
-            throw new ConfigurationException("DOCKER_COMPOSE_FILE not found in classpath. " +
-                    "Please ensure the application is properly packaged.");
-        }
+        java.io.File composeFile = containerHelper.extractComposeFile(
+            DOCKER_COMPOSE_FILE, 
+            "flexo-mms-docker-compose-"
+        );
 
-        ConsoleUtil.info("  Using docker-compose file: " + composeFile.getAbsolutePath());
+        ConsoleUtil.info("  Using compose file: " + composeFile.getAbsolutePath());
 
-        if (!isDockerAvailable()) {
-            throw new DockerException(DOCKER.substring(0, 1).toUpperCase() + DOCKER.substring(1) + " is not available. Please install Docker and ensure it's running.");
-        }
-
-        boolean success = runDockerComposeService(composeFile, "quad-store-server");
+        boolean success = containerHelper.startService(composeFile, "quad-store-server");
 
         if (!success) {
-            throw new DockerException("Failed to start " + FUSEKI + ". Please check Docker logs:\n" +
-                    "  " + DOCKER + " logs quad-store-server");
+            throw new ContainerException("Failed to start " + FUSEKI + ". Please check container logs:\n" +
+                    "  " + containerHelper.getRuntime().getName() + " logs quad-store-server");
         }
 
         ConsoleUtil.success("  " + FUSEKI + " started");
@@ -202,20 +181,19 @@ public class InitCommand implements Runnable {
         waitForFuseki();
     }
 
-    private void startLayer1Service(String mmsUrl) throws ConfigurationException, DockerException, InterruptedException, IOException {
+    private void startLayer1Service(String mmsUrl) throws ConfigurationException, ContainerException, InterruptedException, IOException {
         ConsoleUtil.info("Starting layer1-service...");
 
-        java.io.File composeFile = extractDockerComposeFromClasspath();
-        if (composeFile == null) {
-            throw new ConfigurationException("DOCKER_COMPOSE_FILE not found in classpath. " +
-                    "Please ensure the application is properly packaged.");
-        }
+        java.io.File composeFile = containerHelper.extractComposeFile(
+            DOCKER_COMPOSE_FILE,
+            "flexo-mms-docker-compose-"
+        );
 
-        boolean success = runDockerComposeService(composeFile, "layer1-service");
+        boolean success = containerHelper.startService(composeFile, "layer1-service");
 
         if (!success) {
-            throw new DockerException("Failed to start layer1-service. Please check Docker logs:\n" +
-                    "  " + DOCKER + " logs layer1-service");
+            throw new ContainerException("Failed to start layer1-service. Please check container logs:\n" +
+                    "  " + containerHelper.getRuntime().getName() + " logs layer1-service");
         }
 
         ConsoleUtil.success("  layer1-service started");
@@ -258,185 +236,12 @@ public class InitCommand implements Runnable {
         ConsoleUtil.warn("  layer1-service check timed out, proceeding anyway...");
     }
 
-    private boolean runDockerCompose(java.io.File composeFile) throws Exception {
-        String[] commands = new String[]{"docker compose", "docker-compose"};
-        Exception lastStartError = null;
-
-        for (String command : commands) {
-            String[] cmdParts = command.split(" ", -1);
-            // "docker compose" -> [docker, compose]; "docker-compose" -> [docker-compose]
-            String[] args = cmdParts.length >= 2
-                    ? new String[]{cmdParts[0], cmdParts[1], "-f", composeFile.getAbsolutePath(), "up", "-d"}
-                    : new String[]{cmdParts[0], "-f", composeFile.getAbsolutePath(), "up", "-d"};
-            ProcessBuilder pb = new ProcessBuilder(args);
-            pb.redirectErrorStream(true);
-
-            Process process;
-            try {
-                process = pb.start();
-            } catch (java.io.IOException e) {
-                // This command not found (e.g. no "docker-compose" binary); try next
-                lastStartError = e;
-                continue;
-            }
-
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (parent.isVerbose()) {
-                        ConsoleUtil.debug("  " + line);
-                    }
-                }
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                return true;
-            }
-            // Command ran but failed; do not try the other (e.g. docker-compose not installed)
-            throw new Exception("Docker Compose failed with exit code " + exitCode
-                    + ". Ensure Docker is running and check the compose file. Try: docker compose -f "
-                    + composeFile.getAbsolutePath() + " up -d");
-        }
-
-        // Neither command could be started
-        String msg = "Docker Compose not found. Install Docker Desktop (includes 'docker compose') or install docker-compose.";
-        if (lastStartError != null) {
-            msg += " " + lastStartError.getMessage();
-        }
-        throw new Exception(msg);
+    private void waitForFuseki() throws InterruptedException, ContainerException {
+        containerHelper.waitForServicePort(FUSEKI, 3030, 30, 2000);
     }
 
-    private java.io.File extractDockerComposeFromClasspath() throws ConfigurationException, IOException {
-        // Load docker-compose file from classpath
-        java.io.InputStream resourceStream = getClass().getClassLoader()
-                .getResourceAsStream(DOCKER_COMPOSE_FILE);
-        
-        if (resourceStream == null) {
-            return null;
-        }
-
-        // Create temporary file with secure permissions in system temp directory
-        // Security considerations:
-        // 1. Files.createTempFile() creates files with unique, unpredictable names to prevent
-        //    symlink attacks and race conditions in the publicly writable temp directory
-        // 2. On Unix/Linux/macOS: Explicitly set file permissions to rw------- (0600) at creation time
-        //    to prevent other users from reading the docker-compose configuration
-        // 3. On Windows: Set restrictive ACLs after creation to limit access to owner only
-        // 4. File is marked for deletion on JVM exit to avoid leaving sensitive data in temp directory
-        java.io.File tempFile;
-        if (System.getProperty("os.name").toLowerCase().contains("unix") || 
-            System.getProperty("os.name").toLowerCase().contains("linux") ||
-            System.getProperty("os.name").toLowerCase().contains("mac")) {
-            // On Unix-like systems, create file with restrictive permissions (owner read/write only)
-            // This prevents other users from reading the file in the shared temp directory
-            tempFile = java.nio.file.Files.createTempFile(
-                "flexo-mms-docker-compose-",
-                ".yml",
-                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
-                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
-                )
-            ).toFile();
-        } else {
-            // On Windows and other systems, create file then set restrictive permissions
-            tempFile = java.nio.file.Files.createTempFile(
-                "flexo-mms-docker-compose-",
-                ".yml"
-            ).toFile();
-            // Set file to be readable/writable only by owner, remove all other permissions
-            tempFile.setReadable(false, false);  // Remove read for others
-            tempFile.setReadable(true, true);    // Add read for owner
-            tempFile.setWritable(false, false);  // Remove write for others
-            tempFile.setWritable(true, true);    // Add write for owner
-            tempFile.setExecutable(false, false); // Remove execute for all
-        }
-        tempFile.deleteOnExit(); // Clean up on JVM exit to avoid leaving sensitive data
-
-        // Copy resource to temporary file
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile);
-             java.io.BufferedOutputStream bos = new java.io.BufferedOutputStream(fos)) {
-            
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = resourceStream.read(buffer)) != -1) {
-                bos.write(buffer, 0, bytesRead);
-            }
-            bos.flush();
-        } finally {
-            resourceStream.close();
-        }
-
-        if (parent.isVerbose()) {
-            ConsoleUtil.debug("  Extracted docker-compose file to: " + tempFile.getAbsolutePath());
-        }
-
-        return tempFile;
-    }
-
-    private boolean isDockerAvailable() {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(DOCKER, "--version");
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            return exitCode == 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void waitForServices() throws InterruptedException, DockerException {
-        waitForService(FUSEKI, 3030, FUSEKI + " (quad-store-server)", 
-            FUSEKI + " did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs quad-store-server");
-        waitForService("layer1-service", 8080, "layer1-service", 
-            "layer1-service did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs layer1-service");
-    }
-
-    private void waitForFuseki() throws InterruptedException, DockerException {
-        waitForService(FUSEKI, 3030, FUSEKI, 
-            FUSEKI + " did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs quad-store-server");
-    }
-
-    private void waitForLayer1Service() throws InterruptedException, DockerException {
-        waitForService("layer1-service", 8080, "layer1-service", 
-            "layer1-service did not become ready within timeout. Please check Docker logs:\n  " + DOCKER + " logs layer1-service");
-    }
-
-    private boolean runDockerComposeService(java.io.File composeFile, String serviceName) throws IOException, InterruptedException {
-        String[][] commandVariants = new String[][] {
-            new String[] { DOCKER, "compose" },
-            new String[] { "docker-compose" }
-        };
-
-        for (String[] cmdParts : commandVariants) {
-            ProcessBuilder pb = new ProcessBuilder(cmdParts);
-            pb.command().add("-f");
-            pb.command().add(composeFile.getAbsolutePath());
-            pb.command().add("up");
-            pb.command().add("-d");
-            pb.command().add(serviceName);
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (parent.isVerbose()) {
-                        ConsoleUtil.debug("  " + line);
-                    }
-                }
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                return true;
-            }
-        }
-
-        return false;
+    private void waitForLayer1Service() throws InterruptedException, ContainerException {
+        containerHelper.waitForServicePort("layer1-service", 8080, 30, 2000);
     }
 
     private void loadClusterConfig(String mmsUrl) throws ConfigurationException, ServiceException, IOException, InterruptedException {
@@ -589,7 +394,7 @@ public class InitCommand implements Runnable {
         }
         
         throw new ServiceException(FUSEKI + " quadstore is not available after " + maxAttempts + " attempts. " +
-                "Please check Docker logs: " + DOCKER + " logs quad-store-server", lastException);
+                "Please check container logs using your container runtime", lastException);
     }
 
     private void createOrg(FlexoMmsClient client, String orgId) throws ServiceException, IOException, ResourceAlreadyExistsException {
