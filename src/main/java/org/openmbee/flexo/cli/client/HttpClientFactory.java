@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.net.URLDecoder;
 import java.util.Arrays;
@@ -225,10 +227,55 @@ public class HttpClientFactory {
                 return true;
             }
 
-            // TODO: Support CIDR notation for IP ranges (e.g., 192.168.1.0/24)
-            // This would require additional IP address parsing logic
+            // CIDR notation for IP ranges (e.g., 192.168.1.0/24)
+            if (excludedLower.contains("/") && isIpInCidr(hostLower, excludedLower)) {
+                return true;
+            }
         }
 
         return false;
+    }
+
+    /**
+     * Check whether the given host resolves to an IP address contained in the
+     * supplied CIDR range (e.g. 192.168.1.0/24 or 2001:db8::/32). Returns false
+     * for malformed CIDR, unresolvable hosts, or an address-family mismatch.
+     */
+    static boolean isIpInCidr(String host, String cidr) {
+        try {
+            int slash = cidr.indexOf('/');
+            String network = cidr.substring(0, slash);
+            int prefixLen = Integer.parseInt(cidr.substring(slash + 1).trim());
+
+            byte[] networkBytes = InetAddress.getByName(network).getAddress();
+            byte[] hostBytes = InetAddress.getByName(host).getAddress();
+
+            // Address families must match (both IPv4 or both IPv6)
+            if (networkBytes.length != hostBytes.length) {
+                return false;
+            }
+            int maxPrefix = networkBytes.length * 8;
+            if (prefixLen < 0 || prefixLen > maxPrefix) {
+                return false;
+            }
+
+            int fullBytes = prefixLen / 8;
+            for (int i = 0; i < fullBytes; i++) {
+                if (networkBytes[i] != hostBytes[i]) {
+                    return false;
+                }
+            }
+            int remainingBits = prefixLen % 8;
+            if (remainingBits > 0) {
+                int mask = 0xFF << (8 - remainingBits);
+                if ((networkBytes[fullBytes] & mask) != (hostBytes[fullBytes] & mask)) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (NumberFormatException | UnknownHostException | IndexOutOfBoundsException e) {
+            logger.debug("Ignoring malformed or unresolvable CIDR exclusion '{}' for host '{}'", cidr, host);
+            return false;
+        }
     }
 }

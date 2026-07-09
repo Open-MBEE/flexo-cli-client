@@ -185,9 +185,26 @@ public class FlexoConfig {
         if (envToken != null && !envToken.isEmpty()) {
             return envToken;
         }
-        // Fall back to config file
-        return get("auth.token");
+        // Then the current config key
+        String token = get("auth.token");
+        if (token != null && !token.isEmpty()) {
+            return token;
+        }
+        // Finally fall back to the deprecated auth.remote key for backward compatibility
+        String legacy = get("auth.remote");
+        if (legacy != null && !legacy.isEmpty()) {
+            if (!authRemoteDeprecationWarned) {
+                authRemoteDeprecationWarned = true;
+                logger.warn("Configuration key 'auth.remote' is deprecated; "
+                        + "use 'auth.token' or the FLEXO_AUTH_TOKEN environment variable instead.");
+            }
+            return legacy;
+        }
+        return null;
     }
+
+    /** Guards the one-time deprecation warning for the legacy auth.remote key. */
+    private boolean authRemoteDeprecationWarned = false;
 
     /**
      * Get pre-existing Bearer token for remote servers (auth.remote).

@@ -377,4 +377,25 @@ class FlexoConfigTest {
         FlexoConfig config = new FlexoConfig();
         assertNull(config.getAuthToken());
     }
+
+    @Test
+    void testGetAuthTokenFallsBackToDeprecatedAuthRemote() {
+        if (System.getenv("FLEXO_AUTH_TOKEN") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("auth.remote", "legacy.remote.token");
+        assertEquals("legacy.remote.token", config.getAuthToken());
+    }
+
+    @Test
+    void testAuthTokenPreferredOverDeprecatedAuthRemote() {
+        if (System.getenv("FLEXO_AUTH_TOKEN") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("auth.token", "current.token");
+        config.set("auth.remote", "legacy.remote.token");
+        assertEquals("current.token", config.getAuthToken());
+    }
 }

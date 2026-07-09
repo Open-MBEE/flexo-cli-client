@@ -218,4 +218,51 @@ class HttpClientFactoryTest {
         Set<String> excluded = HttpClientFactory.parseNoProxy("localhost");
         assertFalse(HttpClientFactory.shouldBypassProxy(null, excluded));
     }
+
+    // ---- CIDR ----
+
+    @Test
+    void testShouldBypassCidrIpv4InRange() {
+        Set<String> excluded = HttpClientFactory.parseNoProxy("192.168.1.0/24");
+        assertTrue(HttpClientFactory.shouldBypassProxy("192.168.1.50", excluded));
+        assertTrue(HttpClientFactory.shouldBypassProxy("192.168.1.255", excluded));
+    }
+
+    @Test
+    void testShouldNotBypassCidrIpv4OutOfRange() {
+        Set<String> excluded = HttpClientFactory.parseNoProxy("192.168.1.0/24");
+        assertFalse(HttpClientFactory.shouldBypassProxy("192.168.2.1", excluded));
+    }
+
+    @Test
+    void testShouldBypassCidrNonByteAlignedPrefix() {
+        // /28 -> 192.168.1.0-192.168.1.15
+        Set<String> excluded = HttpClientFactory.parseNoProxy("192.168.1.0/28");
+        assertTrue(HttpClientFactory.shouldBypassProxy("192.168.1.15", excluded));
+        assertFalse(HttpClientFactory.shouldBypassProxy("192.168.1.16", excluded));
+    }
+
+    @Test
+    void testCidrIsIpInCidrDirect() {
+        assertTrue(HttpClientFactory.isIpInCidr("10.0.0.5", "10.0.0.0/8"));
+        assertFalse(HttpClientFactory.isIpInCidr("11.0.0.5", "10.0.0.0/8"));
+    }
+
+    @Test
+    void testCidrIpv6InRange() {
+        assertTrue(HttpClientFactory.isIpInCidr("2001:db8::1", "2001:db8::/32"));
+        assertFalse(HttpClientFactory.isIpInCidr("2001:dead::1", "2001:db8::/32"));
+    }
+
+    @Test
+    void testCidrAddressFamilyMismatch() {
+        // IPv4 host against IPv6 CIDR must not match
+        assertFalse(HttpClientFactory.isIpInCidr("192.168.1.1", "2001:db8::/32"));
+    }
+
+    @Test
+    void testCidrMalformedIsIgnored() {
+        assertFalse(HttpClientFactory.isIpInCidr("192.168.1.1", "192.168.1.0/notaprefix"));
+        assertFalse(HttpClientFactory.isIpInCidr("192.168.1.1", "192.168.1.0/40"));
+    }
 }
