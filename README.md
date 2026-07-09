@@ -627,6 +627,44 @@ auth.sshKeyPath=~/.ssh/flexo_rsa
 
 3. Register your public key with the MMS service (configuration depends on deployment)
 
+### Pre-Existing JWT Token (Corporate Environments)
+
+For corporate environments with external authentication systems, you can provide a pre-issued JWT token:
+
+**Using environment variable (recommended):**
+```bash
+export FLEXO_AUTH_TOKEN="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+flexo pull master --output model.ttl
+```
+
+**Using configuration file:**
+```properties
+auth.token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+See [PROXY-AND-AUTH.md](PROXY-AND-AUTH.md) for detailed documentation.
+
+## Proxy Configuration
+
+Flexo CLI automatically recognizes standard proxy environment variables for corporate networks:
+
+```bash
+# Set proxy configuration
+export HTTPS_PROXY=http://proxy.example.com:8080
+export HTTP_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,.internal.corp
+
+# Use CLI normally
+flexo pull master --output model.ttl
+```
+
+Supported environment variables:
+- `HTTPS_PROXY` / `https_proxy` - Proxy for HTTPS connections
+- `HTTP_PROXY` / `http_proxy` - Proxy for HTTP connections
+- `NO_PROXY` / `no_proxy` - Comma-separated list of hosts to exclude
+
+See [PROXY-AND-AUTH.md](PROXY-AND-AUTH.md) for complete proxy configuration documentation.
+
 ## Troubleshooting
 
 ### Docker services not starting

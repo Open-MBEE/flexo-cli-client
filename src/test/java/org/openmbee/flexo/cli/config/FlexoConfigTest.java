@@ -300,4 +300,81 @@ class FlexoConfigTest {
         
         assertEquals("devsecretpleasechangeinproduction1234567890", config.getLocalJwtSecret());
     }
+
+    // ---- Proxy configuration ----
+
+    @Test
+    void testIsProxyConfiguredDefaultFalse() {
+        // Skip if the test environment itself defines proxy vars
+        if (System.getenv("HTTP_PROXY") != null || System.getenv("http_proxy") != null
+                || System.getenv("HTTPS_PROXY") != null || System.getenv("https_proxy") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        assertFalse(config.isProxyConfigured());
+        assertNull(config.getHttpProxyUrl());
+        assertNull(config.getHttpsProxyUrl());
+    }
+
+    @Test
+    void testGetHttpProxyUrlFromConfigFile() {
+        if (System.getenv("HTTP_PROXY") != null || System.getenv("http_proxy") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("proxy.http.url", "http://proxy.example.com:8080");
+        assertEquals("http://proxy.example.com:8080", config.getHttpProxyUrl());
+        assertTrue(config.isProxyConfigured());
+    }
+
+    @Test
+    void testGetHttpsProxyUrlFromConfigFile() {
+        if (System.getenv("HTTPS_PROXY") != null || System.getenv("https_proxy") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("proxy.https.url", "https://secure-proxy.example.com:3128");
+        assertEquals("https://secure-proxy.example.com:3128", config.getHttpsProxyUrl());
+        assertTrue(config.isProxyConfigured());
+    }
+
+    @Test
+    void testGetProxyExclusionsFromConfigFile() {
+        if (System.getenv("NO_PROXY") != null || System.getenv("no_proxy") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("proxy.no", "localhost,.internal.corp");
+        assertEquals("localhost,.internal.corp", config.getProxyExclusions());
+    }
+
+    @Test
+    void testGetProxyExclusionsDefaultNull() {
+        if (System.getenv("NO_PROXY") != null || System.getenv("no_proxy") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        assertNull(config.getProxyExclusions());
+    }
+
+    // ---- Auth token ----
+
+    @Test
+    void testGetAuthTokenFromConfigFile() {
+        if (System.getenv("FLEXO_AUTH_TOKEN") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        config.set("auth.token", "eyJhbGciOi.test.token");
+        assertEquals("eyJhbGciOi.test.token", config.getAuthToken());
+    }
+
+    @Test
+    void testGetAuthTokenDefaultNull() {
+        if (System.getenv("FLEXO_AUTH_TOKEN") != null) {
+            return;
+        }
+        FlexoConfig config = new FlexoConfig();
+        assertNull(config.getAuthToken());
+    }
 }

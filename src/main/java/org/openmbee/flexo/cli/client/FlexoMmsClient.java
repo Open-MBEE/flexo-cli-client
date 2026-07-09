@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hc.client5.http.classic.methods.*;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.jena.rdf.model.Model;
+import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Branch;
 import org.openmbee.flexo.cli.util.RdfParser;
 import org.slf4j.Logger;
@@ -31,9 +31,25 @@ public class FlexoMmsClient implements AutoCloseable {
     private final ObjectMapper objectMapper;
 
     public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler) {
+        this(baseUrl, authHandler, null);
+    }
+
+    public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler, FlexoConfig config) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.authHandler = authHandler;
-        this.httpClient = HttpClients.createDefault();
+        
+        // Use HttpClientFactory if config is available (for proxy support)
+        if (config != null) {
+            HttpClientFactory factory = new HttpClientFactory(config);
+            this.httpClient = factory.createClient();
+            if (config.isProxyConfigured()) {
+                logger.debug("HTTP client created with proxy configuration");
+            }
+        } else {
+            // Fall back to default client for backward compatibility
+            this.httpClient = org.apache.hc.client5.http.impl.classic.HttpClients.createDefault();
+        }
+        
         this.objectMapper = new ObjectMapper();
     }
 

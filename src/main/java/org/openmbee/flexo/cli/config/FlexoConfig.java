@@ -175,9 +175,26 @@ public class FlexoConfig {
     }
 
     /**
-     * Get pre-existing Bearer token for remote servers (auth.remote).
+     * Get pre-existing Bearer token for remote servers (auth.token).
+     * Also checks FLEXO_AUTH_TOKEN environment variable.
      * Used when the remote expects a pre-issued token rather than local HMAC JWT.
      */
+    public String getAuthToken() {
+        // First check environment variable
+        String envToken = System.getenv("FLEXO_AUTH_TOKEN");
+        if (envToken != null && !envToken.isEmpty()) {
+            return envToken;
+        }
+        // Fall back to config file
+        return get("auth.token");
+    }
+
+    /**
+     * Get pre-existing Bearer token for remote servers (auth.remote).
+     * Used when the remote expects a pre-issued token rather than local HMAC JWT.
+     * @deprecated Use getAuthToken() instead
+     */
+    @Deprecated
     public String getAuthRemote() {
         return get("auth.remote");
     }
@@ -188,6 +205,64 @@ public class FlexoConfig {
      */
     public String getLocalJwtSecret() {
         return "devsecretpleasechangeinproduction1234567890";
+    }
+
+    // Proxy configuration methods
+
+    /**
+     * Get HTTP proxy URL from environment (HTTP_PROXY) or config (proxy.http.url)
+     */
+    public String getHttpProxyUrl() {
+        // Check environment variable first (standard convention)
+        String envProxy = System.getenv("HTTP_PROXY");
+        if (envProxy == null || envProxy.isEmpty()) {
+            envProxy = System.getenv("http_proxy");
+        }
+        if (envProxy != null && !envProxy.isEmpty()) {
+            return envProxy;
+        }
+        // Fall back to config file
+        return get("proxy.http.url");
+    }
+
+    /**
+     * Get HTTPS proxy URL from environment (HTTPS_PROXY) or config (proxy.https.url)
+     */
+    public String getHttpsProxyUrl() {
+        // Check environment variable first (standard convention)
+        String envProxy = System.getenv("HTTPS_PROXY");
+        if (envProxy == null || envProxy.isEmpty()) {
+            envProxy = System.getenv("https_proxy");
+        }
+        if (envProxy != null && !envProxy.isEmpty()) {
+            return envProxy;
+        }
+        // Fall back to config file
+        return get("proxy.https.url");
+    }
+
+    /**
+     * Get proxy exclusion list from environment (NO_PROXY) or config (proxy.no)
+     * Returns comma-separated list of hosts to exclude from proxying
+     */
+    public String getProxyExclusions() {
+        // Check environment variable first (standard convention)
+        String envNoProxy = System.getenv("NO_PROXY");
+        if (envNoProxy == null || envNoProxy.isEmpty()) {
+            envNoProxy = System.getenv("no_proxy");
+        }
+        if (envNoProxy != null && !envNoProxy.isEmpty()) {
+            return envNoProxy;
+        }
+        // Fall back to config file
+        return get("proxy.no");
+    }
+
+    /**
+     * Check if proxy is configured (either HTTP or HTTPS)
+     */
+    public boolean isProxyConfigured() {
+        return getHttpProxyUrl() != null || getHttpsProxyUrl() != null;
     }
 
     // Remote management methods
