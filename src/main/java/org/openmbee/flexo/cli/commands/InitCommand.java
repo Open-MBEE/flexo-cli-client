@@ -114,7 +114,7 @@ public class InitCommand implements Runnable {
                 startLayer1Service(config.getMmsUrl());
             }
 
-            try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler)) {
+            try (FlexoMmsClient client = new FlexoMmsClient(mmsUrl, authHandler, config)) {
                 if (skipDocker) {
                     // When containers are skipped, ensure cluster configuration is loaded via HTTP
                     generateAndLoadClusterConfig(client, mmsUrl);

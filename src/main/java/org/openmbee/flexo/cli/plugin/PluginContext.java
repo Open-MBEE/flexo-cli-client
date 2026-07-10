@@ -36,6 +36,7 @@ public class PluginContext {
      * Create an authenticated FlexoMmsClient for making API calls
      *
      * The client will use the configured authentication method (local mode or SSH keys)
+     * and proxy settings from environment or config.
      *
      * @return FlexoMmsClient ready for use
      */
@@ -45,9 +46,10 @@ public class PluginContext {
                 config.getSshKeyPath(),
                 config.isLocalMode(),
                 config.getLocalUser(),
-                config.getLocalJwtSecret()
+                config.getLocalJwtSecret(),
+                config.getAuthToken()
         );
-        return new FlexoMmsClient(config.getMmsUrl(), authHandler);
+        return new FlexoMmsClient(config.getMmsUrl(), authHandler, config);
     }
 
     /**

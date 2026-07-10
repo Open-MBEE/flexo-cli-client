@@ -62,7 +62,7 @@ public class MergeCommand extends BaseCommand {
         // Validate org and repo
         validateOrgAndRepo(orgId, repoId);
 
-        try (FlexoMmsClient client = createClient(config)) {
+        try (FlexoMmsClient client = createClient(config, true)) {
             ConsoleUtil.info("Merging " + source + " into " + target + "...");
 
             // Create diff between branches

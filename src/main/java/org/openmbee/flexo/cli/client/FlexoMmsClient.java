@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hc.client5.http.classic.methods.*;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.jena.rdf.model.Model;
+import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Branch;
 import org.openmbee.flexo.cli.util.RdfParser;
 import org.slf4j.Logger;
@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * HTTP client for communicating with Flexo MMS Layer 1 Service
@@ -31,9 +33,25 @@ public class FlexoMmsClient implements AutoCloseable {
     private final ObjectMapper objectMapper;
 
     public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler) {
+        this(baseUrl, authHandler, null);
+    }
+
+    public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler, FlexoConfig config) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.authHandler = authHandler;
-        this.httpClient = HttpClients.createDefault();
+        
+        // Use HttpClientFactory if config is available (for proxy support)
+        if (config != null) {
+            HttpClientFactory factory = new HttpClientFactory(config);
+            this.httpClient = factory.createClient();
+            if (config.isProxyConfigured()) {
+                logger.debug("HTTP client created with proxy configuration");
+            }
+        } else {
+            // Fall back to default client for backward compatibility
+            this.httpClient = org.apache.hc.client5.http.impl.classic.HttpClients.createDefault();
+        }
+        
         this.objectMapper = new ObjectMapper();
     }
 
@@ -314,17 +332,39 @@ public class FlexoMmsClient implements AutoCloseable {
         return branches;
     }
 
+    /**
+     * Matches a commit IRI of the form .../commits/&lt;id&gt; and captures the id.
+     * The id segment stops at the next '/', '>' or whitespace.
+     */
+    private static final Pattern COMMIT_ID_PATTERN =
+        Pattern.compile("/commits/([^/>\\s]+)");
+
     private String extractCommitId(String response) {
-        // Try to extract commit ID from response
-        // This is a placeholder - actual implementation depends on API response format
-        try {
-            JsonNode node = objectMapper.readTree(response);
-            if (node.has("commitId")) {
-                return node.get("commitId").asText();
-            }
-        } catch (Exception e) {
-            logger.debug("Could not extract commit ID from response: {}", e.getMessage());
+        if (response == null || response.isEmpty()) {
+            return "success";
         }
+
+        // The Layer 1 service returns an RDF/SPARQL payload (a set of PREFIX
+        // declarations) rather than JSON. Only attempt a JSON parse when the
+        // body actually looks like JSON, so we don't log a spurious parse error.
+        String trimmed = response.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                JsonNode node = objectMapper.readTree(response);
+                if (node.has("commitId")) {
+                    return node.get("commitId").asText();
+                }
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                logger.debug("Could not parse JSON commit response: {}", e.getOriginalMessage());
+            }
+        }
+
+        // Extract the commit id from a commit IRI (e.g. .../commits/<uuid>).
+        Matcher matcher = COMMIT_ID_PATTERN.matcher(response);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
         return "success";
     }
 

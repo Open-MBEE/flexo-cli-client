@@ -112,7 +112,7 @@ public abstract class BaseCommand implements Runnable {
                     remote.getLocalUser() : config.getLocalUser();
                 localJwtSecret = remote.getLocalJwtSecret() != null ?
                     remote.getLocalJwtSecret() : config.getLocalJwtSecret();
-                bearerToken = remote.getAuthToken() != null ? remote.getAuthToken() : config.getAuthRemote();
+                bearerToken = remote.getAuthToken() != null ? remote.getAuthToken() : config.getAuthToken();
             } else {
                 mmsUrl = config.getMmsUrl();
                 authEnabled = config.isAuthEnabled();
@@ -120,7 +120,7 @@ public abstract class BaseCommand implements Runnable {
                 localMode = config.isLocalMode();
                 localUser = config.getLocalUser();
                 localJwtSecret = config.getLocalJwtSecret();
-                bearerToken = config.getAuthRemote();
+                bearerToken = config.getAuthToken();
             }
         } else {
             mmsUrl = config.getMmsUrl();
@@ -142,7 +142,7 @@ public abstract class BaseCommand implements Runnable {
             bearerToken
         );
 
-        return new FlexoMmsClient(mmsUrl, authHandler);
+        return new FlexoMmsClient(mmsUrl, authHandler, config);
     }
 
     /**

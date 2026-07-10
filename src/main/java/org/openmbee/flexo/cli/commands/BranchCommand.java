@@ -56,7 +56,7 @@ public class BranchCommand extends BaseCommand {
         // Validate org and repo
         validateOrgAndRepo(orgId, repoId);
 
-        try (FlexoMmsClient client = createClient(config)) {
+        try (FlexoMmsClient client = createClient(config, true)) {
             if (create) {
                 createBranch(client, orgId, repoId);
             } else if (delete) {
