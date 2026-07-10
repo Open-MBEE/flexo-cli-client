@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * HTTP client for communicating with Flexo MMS Layer 1 Service
@@ -330,17 +332,39 @@ public class FlexoMmsClient implements AutoCloseable {
         return branches;
     }
 
+    /**
+     * Matches a commit IRI of the form .../commits/&lt;id&gt; and captures the id.
+     * The id segment stops at the next '/', '>' or whitespace.
+     */
+    private static final Pattern COMMIT_ID_PATTERN =
+        Pattern.compile("/commits/([^/>\\s]+)");
+
     private String extractCommitId(String response) {
-        // Try to extract commit ID from response
-        // This is a placeholder - actual implementation depends on API response format
-        try {
-            JsonNode node = objectMapper.readTree(response);
-            if (node.has("commitId")) {
-                return node.get("commitId").asText();
-            }
-        } catch (Exception e) {
-            logger.debug("Could not extract commit ID from response: {}", e.getMessage());
+        if (response == null || response.isEmpty()) {
+            return "success";
         }
+
+        // The Layer 1 service returns an RDF/SPARQL payload (a set of PREFIX
+        // declarations) rather than JSON. Only attempt a JSON parse when the
+        // body actually looks like JSON, so we don't log a spurious parse error.
+        String trimmed = response.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                JsonNode node = objectMapper.readTree(response);
+                if (node.has("commitId")) {
+                    return node.get("commitId").asText();
+                }
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                logger.debug("Could not parse JSON commit response: {}", e.getOriginalMessage());
+            }
+        }
+
+        // Extract the commit id from a commit IRI (e.g. .../commits/<uuid>).
+        Matcher matcher = COMMIT_ID_PATTERN.matcher(response);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
         return "success";
     }
 
