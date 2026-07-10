@@ -202,16 +202,14 @@ public class CollectionCommand extends BaseCommand {
             }
 
             try (FlexoMmsClient client = createClient(config, true)) {
-                // Resolve each ref name to a full branch IRI under the current repo.
-                String baseUrl = client.getBaseUrl();
+                // Resolve each ref name to a full branch IRI. The server stores
+                // refs under its own root context (e.g. http://layer1-service/...),
+                // which is not necessarily the client base URL, and validates each
+                // mms:collects target against the stored ref IRI. The client
+                // discovers the root context from existing branch IRIs.
                 java.util.List<String> refIris = new java.util.ArrayList<>();
                 for (String ref : refs) {
-                    if (ref.startsWith("http://") || ref.startsWith("https://")) {
-                        refIris.add(ref);
-                    } else {
-                        refIris.add(String.format("%s/orgs/%s/repos/%s/branches/%s",
-                                baseUrl, orgId, repoId, ref));
-                    }
+                    refIris.add(client.resolveBranchIri(orgId, repoId, ref));
                 }
 
                 ConsoleUtil.info("Creating collection '" + collectionId + "' in " + orgId

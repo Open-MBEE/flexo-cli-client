@@ -343,7 +343,9 @@ class FlexoMmsClientTest {
 
         FlexoMmsClient client = createClientWithMockedHttp();
 
-        String result = client.squash("org1", "repo1", "lock1", "lock2");
+        String result = client.squash("org1", "repo1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock2");
 
         assertEquals("abc-123", result);
         verify(mockHttpClient).execute(any(HttpPost.class));
@@ -358,7 +360,9 @@ class FlexoMmsClientTest {
 
         FlexoMmsClient client = createClientWithMockedHttp();
 
-        assertThrows(IOException.class, () -> client.squash("org1", "repo1", "lock1", "lock2"));
+        assertThrows(IOException.class, () -> client.squash("org1", "repo1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock2"));
     }
 
     @Test
@@ -456,6 +460,36 @@ class FlexoMmsClientTest {
 
         assertThrows(IOException.class,
             () -> client.queryCollection("org1", "c1", "INVALID"));
+    }
+
+    @Test
+    void testResolveBranchIriUsesServerRootContext() throws Exception {
+        // Branch list carries the server root context (http://layer1-service),
+        // which differs from the client base URL (http://example.com).
+        String turtle = "@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n"
+                + "<http://layer1-service/orgs/org1/repos/repo1/branches/master> a mms:Branch ;\n"
+                + "    mms:id \"master\" ;\n"
+                + "    mms:commit <http://layer1-service/orgs/org1/repos/repo1/commits/abc> .";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(turtle.getBytes()));
+        when(mockHttpClient.execute(any(HttpGet.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        String iri = client.resolveBranchIri("org1", "repo1", "master");
+
+        assertEquals("http://layer1-service/orgs/org1/repos/repo1/branches/master", iri);
+    }
+
+    @Test
+    void testResolveBranchIriPassesThroughAbsolute() throws Exception {
+        FlexoMmsClient client = createClientWithMockedHttp();
+        String abs = "http://layer1-service/orgs/org1/repos/repo1/branches/feature";
+        assertEquals(abs, client.resolveBranchIri("org1", "repo1", abs));
+        // Absolute IRI must not trigger a branch-list lookup.
+        verify(mockHttpClient, never()).execute(any(HttpGet.class));
     }
 
     private FlexoMmsClient createClientWithMockedHttp() throws Exception {

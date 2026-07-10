@@ -295,16 +295,59 @@ public class FlexoMmsClient implements AutoCloseable {
     /**
      * Resolve a lock reference to a full lock IRI. If the reference already
      * looks like an absolute IRI it is returned unchanged; otherwise it is
-     * treated as a lock ID under the given repository.
+     * treated as a lock ID under the given repository and resolved against the
+     * server's root context (which may differ from the client base URL).
      */
-    private String resolveLockIri(String orgId, String repoId, String lockRef) {
+    private String resolveLockIri(String orgId, String repoId, String lockRef) throws IOException {
         if (lockRef == null || lockRef.isEmpty()) {
             return lockRef;
         }
         if (lockRef.startsWith("http://") || lockRef.startsWith("https://")) {
             return lockRef;
         }
-        return String.format("%s/orgs/%s/repos/%s/locks/%s", baseUrl, orgId, repoId, lockRef);
+        return String.format("%s/orgs/%s/repos/%s/locks/%s",
+                getServerRootContext(orgId, repoId), orgId, repoId, lockRef);
+    }
+
+    /**
+     * Resolve a ref (branch) name to a full branch IRI under the given repo,
+     * using the server's root context. Absolute IRIs are returned unchanged.
+     */
+    public String resolveBranchIri(String orgId, String repoId, String refName) throws IOException {
+        if (refName == null || refName.isEmpty()) {
+            return refName;
+        }
+        if (refName.startsWith("http://") || refName.startsWith("https://")) {
+            return refName;
+        }
+        return String.format("%s/orgs/%s/repos/%s/branches/%s",
+                getServerRootContext(orgId, repoId), orgId, repoId, refName);
+    }
+
+    /**
+     * Determine the server's root context (scheme + authority + any base path)
+     * under which refs are stored. The client base URL may differ from the
+     * server root context (e.g. a proxied or containerized MMS), and refs are
+     * validated against their stored IRIs, so we derive the root context from
+     * an existing branch's commit IRI. Falls back to the client base URL when
+     * no branch IRI is available.
+     */
+    private String getServerRootContext(String orgId, String repoId) throws IOException {
+        try {
+            for (Branch branch : listBranches(orgId, repoId)) {
+                String commitId = branch.getCommitId();
+                if (commitId != null) {
+                    int idx = commitId.indexOf("/orgs/");
+                    if (idx > 0) {
+                        return commitId.substring(0, idx);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.debug("Could not resolve server root context, falling back to base URL: {}",
+                    e.getMessage());
+        }
+        return baseUrl;
     }
 
     /**
