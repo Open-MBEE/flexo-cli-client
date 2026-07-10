@@ -31,6 +31,7 @@ public class FlexoMmsClient implements AutoCloseable {
     private final AuthenticationHandler authHandler;
     private final CloseableHttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final FlexoConfig config;
 
     public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler) {
         this(baseUrl, authHandler, null);
@@ -39,6 +40,7 @@ public class FlexoMmsClient implements AutoCloseable {
     public FlexoMmsClient(String baseUrl, AuthenticationHandler authHandler, FlexoConfig config) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.authHandler = authHandler;
+        this.config = config;
         
         // Use HttpClientFactory if config is available (for proxy support)
         if (config != null) {
@@ -265,6 +267,16 @@ public class FlexoMmsClient implements AutoCloseable {
      */
     public String getBaseUrl() {
         return baseUrl;
+    }
+
+    /**
+     * Get the FlexoConfig this client was created with (may be null when
+     * constructed via the legacy two-arg constructor). Exposed so callers
+     * that create their own HTTP clients (e.g. plugins targeting a different
+     * backend) can reuse the same proxy configuration.
+     */
+    public FlexoConfig getConfig() {
+        return config;
     }
 
     public void addAuthHeader(HttpUriRequestBase request) {
