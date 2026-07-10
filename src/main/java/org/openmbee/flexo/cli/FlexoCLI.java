@@ -1,6 +1,7 @@
 package org.openmbee.flexo.cli;
 
 import org.openmbee.flexo.cli.commands.BranchCommand;
+import org.openmbee.flexo.cli.commands.CollectionCommand;
 import org.openmbee.flexo.cli.commands.CommandExecutionException;
 import org.openmbee.flexo.cli.commands.InitCommand;
 import org.openmbee.flexo.cli.commands.MergeCommand;
@@ -8,6 +9,7 @@ import org.openmbee.flexo.cli.commands.PullCommand;
 import org.openmbee.flexo.cli.commands.PushCommand;
 import org.openmbee.flexo.cli.commands.RemoteCommand;
 import org.openmbee.flexo.cli.commands.RmCommand;
+import org.openmbee.flexo.cli.commands.SquashCommand;
 import org.openmbee.flexo.cli.commands.BaseCommand;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.plugin.FlexoPlugin;
@@ -38,6 +40,8 @@ import java.util.List;
                 PushCommand.class,
                 RmCommand.class,
                 MergeCommand.class,
+                SquashCommand.class,
+                CollectionCommand.class,
                 RemoteCommand.class,
                 CommandLine.HelpCommand.class
         }
@@ -119,6 +123,8 @@ public class FlexoCLI implements Runnable {
         ConsoleUtil.info("  push    - Commit model changes to a branch");
         ConsoleUtil.info("  rm      - Remove elements from the model");
         ConsoleUtil.info("  merge   - Merge changes between branches");
+        ConsoleUtil.info("  squash  - Squash commits between two locks");
+        ConsoleUtil.info("  collection - Manage collections (groupings of refs)");
         ConsoleUtil.info("");
         ConsoleUtil.info("Use 'flexo <command> --help' for more information about a command");
     }
