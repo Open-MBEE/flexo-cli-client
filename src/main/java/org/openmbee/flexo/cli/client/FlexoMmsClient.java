@@ -11,6 +11,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.jena.rdf.model.Model;
 import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.openmbee.flexo.cli.model.Branch;
+import org.openmbee.flexo.cli.model.Collection;
 import org.openmbee.flexo.cli.util.RdfParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,6 +244,269 @@ public class FlexoMmsClient implements AutoCloseable {
     }
 
     /**
+     * Squash the linear commit path between two locks into a single commit.
+     *
+     * Posts to the repo's /squash endpoint with a Turtle body referencing the
+     * source and destination lock IRIs via mms:srcRef and mms:dstRef. The
+     * service squashes the linear commit path between the two locks' commits
+     * into a single diff on the newer (destination) lock's commit.
+     *
+     * @param orgId    Organization ID
+     * @param repoId   Repository ID
+     * @param srcLock  Source lock ID (or a full lock IRI)
+     * @param dstLock  Destination lock ID (or a full lock IRI); must be the newer commit
+     * @return The commit ID of the resulting squashed commit
+     */
+    public String squash(String orgId, String repoId, String srcLock, String dstLock) throws IOException {
+        String url = String.format("%s/orgs/%s/repos/%s/squash", baseUrl, orgId, repoId);
+        logger.debug("POST {}", url);
+
+        String srcRef = resolveLockIri(orgId, repoId, srcLock);
+        String dstRef = resolveLockIri(orgId, repoId, dstLock);
+
+        // Build RDF body referencing the two locks to squash between.
+        StringBuilder rdfBody = new StringBuilder();
+        rdfBody.append("@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n\n");
+        rdfBody.append("<> mms:srcRef <").append(srcRef).append("> .\n");
+        rdfBody.append("<> mms:dstRef <").append(dstRef).append("> .\n");
+
+        HttpPost request = new HttpPost(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "text/turtle");
+        request.setEntity(new StringEntity(rdfBody.toString(), ContentType.parse("text/turtle")));
+
+        logger.debug("Squash RDF:\n{}", rdfBody.toString());
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                logger.debug("Squash completed successfully");
+                return extractCommitId(responseBody);
+            } else {
+                throw new IOException("Failed to squash commits: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
+     * Resolve a lock reference to a full lock IRI. If the reference already
+     * looks like an absolute IRI it is returned unchanged; otherwise it is
+     * treated as a lock ID under the given repository and resolved against the
+     * server's root context (which may differ from the client base URL).
+     */
+    private String resolveLockIri(String orgId, String repoId, String lockRef) throws IOException {
+        if (lockRef == null || lockRef.isEmpty()) {
+            return lockRef;
+        }
+        if (lockRef.startsWith("http://") || lockRef.startsWith("https://")) {
+            return lockRef;
+        }
+        return String.format("%s/orgs/%s/repos/%s/locks/%s",
+                getServerRootContext(orgId, repoId), orgId, repoId, lockRef);
+    }
+
+    /**
+     * Resolve a ref (branch) name to a full branch IRI under the given repo,
+     * using the server's root context. Absolute IRIs are returned unchanged.
+     */
+    public String resolveBranchIri(String orgId, String repoId, String refName) throws IOException {
+        if (refName == null || refName.isEmpty()) {
+            return refName;
+        }
+        if (refName.startsWith("http://") || refName.startsWith("https://")) {
+            return refName;
+        }
+        return String.format("%s/orgs/%s/repos/%s/branches/%s",
+                getServerRootContext(orgId, repoId), orgId, repoId, refName);
+    }
+
+    /**
+     * Determine the server's root context (scheme + authority + any base path)
+     * under which refs are stored. The client base URL may differ from the
+     * server root context (e.g. a proxied or containerized MMS), and refs are
+     * validated against their stored IRIs, so we derive the root context from
+     * an existing branch's commit IRI. Falls back to the client base URL when
+     * no branch IRI is available.
+     */
+    private String getServerRootContext(String orgId, String repoId) throws IOException {
+        try {
+            for (Branch branch : listBranches(orgId, repoId)) {
+                String commitId = branch.getCommitId();
+                if (commitId != null) {
+                    int idx = commitId.indexOf("/orgs/");
+                    if (idx > 0) {
+                        return commitId.substring(0, idx);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.debug("Could not resolve server root context, falling back to base URL: {}",
+                    e.getMessage());
+        }
+        return baseUrl;
+    }
+
+    /**
+     * List all collections in an organization.
+     */
+    public List<Collection> listCollections(String orgId) throws IOException {
+        String url = String.format("%s/orgs/%s/collections", baseUrl, orgId);
+        logger.debug("GET {}", url);
+
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", "text/turtle");
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                return parseCollectionsFromRdf(responseBody);
+            } else {
+                throw new IOException("Failed to list collections: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
+     * Get a specific collection.
+     */
+    public Collection getCollection(String orgId, String collectionId) throws IOException {
+        String url = String.format("%s/orgs/%s/collections/%s", baseUrl, orgId, collectionId);
+        logger.debug("GET {}", url);
+
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", "text/turtle");
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                List<Collection> collections = parseCollectionsFromRdf(responseBody);
+                return collections.isEmpty() ? null : collections.get(0);
+            } else {
+                throw new IOException("Failed to get collection: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
+     * Create a new collection that groups the given refs.
+     *
+     * Puts to the collection resource with a Turtle body declaring one
+     * mms:collects statement per collected ref. The refs are branch, lock or
+     * scratch IRIs; relative IRIs are resolved against the collection resource.
+     *
+     * @param orgId        Organization ID
+     * @param collectionId Collection ID (slug)
+     * @param refIris      One or more ref IRIs to collect
+     * @return The created collection
+     */
+    public Collection createCollection(String orgId, String collectionId, List<String> refIris) throws IOException {
+        if (refIris == null || refIris.isEmpty()) {
+            throw new IOException("A collection requires at least one collected ref");
+        }
+
+        String url = String.format("%s/orgs/%s/collections/%s", baseUrl, orgId, collectionId);
+        logger.debug("PUT {}", url);
+
+        // Build RDF body with an mms:collects statement per ref.
+        StringBuilder rdfBody = new StringBuilder();
+        rdfBody.append("@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n");
+        rdfBody.append("@prefix dct: <http://purl.org/dc/terms/> .\n\n");
+        rdfBody.append("<> dct:title \"").append(collectionId).append("\"@en .\n");
+        for (String refIri : refIris) {
+            rdfBody.append("<> mms:collects <").append(refIri).append("> .\n");
+        }
+
+        HttpPut request = new HttpPut(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "text/turtle");
+        request.setEntity(new StringEntity(rdfBody.toString(), ContentType.parse("text/turtle")));
+
+        logger.debug("Collection creation RDF:\n{}", rdfBody.toString());
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                logger.debug("Collection created successfully");
+                return getCollection(orgId, collectionId);
+            } else {
+                throw new IOException("Failed to create collection: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
+     * Get the union graph of all refs collected by a collection (pull operation).
+     */
+    public Model getCollectionModel(String orgId, String collectionId, String format) throws IOException {
+        String url = String.format("%s/orgs/%s/collections/%s/graph", baseUrl, orgId, collectionId);
+        logger.debug("GET {}", url);
+
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", RdfParser.getContentType(format));
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                return RdfParser.parseString(responseBody, format);
+            } else {
+                throw new IOException("Failed to get collection model: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
+     * Run a SPARQL query across the union of all graphs collected by a collection.
+     *
+     * @return The raw query result body as returned by the service
+     */
+    public String queryCollection(String orgId, String collectionId, String sparql) throws IOException {
+        String url = String.format("%s/orgs/%s/collections/%s/query", baseUrl, orgId, collectionId);
+        logger.debug("POST {}", url);
+
+        HttpPost request = new HttpPost(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "application/sparql-query");
+        request.setHeader("Accept", "application/sparql-results+json");
+        request.setEntity(new StringEntity(sparql, ContentType.parse("application/sparql-query")));
+
+        try (CloseableHttpResponse response = httpClient.execute(request)) {
+            int statusCode = response.getCode();
+            String responseBody = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+
+            if (statusCode >= 200 && statusCode < 300) {
+                return responseBody;
+            } else {
+                throw new IOException("Failed to query collection: HTTP " + statusCode + " - " + responseBody);
+            }
+        } catch (org.apache.hc.core5.http.ParseException e) {
+            throw new IOException("Failed to parse response", e);
+        }
+    }
+
+    /**
      * Execute arbitrary HTTP request with authentication
      */
     public String executeRequest(HttpUriRequestBase request) throws IOException {
@@ -342,6 +606,59 @@ public class FlexoMmsClient implements AutoCloseable {
             logger.error("Failed to parse branches from RDF: {}", e.getMessage(), e);
         }
         return branches;
+    }
+
+    private List<Collection> parseCollectionsFromRdf(String rdfContent) {
+        List<Collection> collections = new ArrayList<>();
+        try {
+            Model model = RdfParser.parseString(rdfContent, "turtle");
+            logger.debug("Parsed RDF model with {} statements", model.size());
+
+            String mmsNs = "https://mms.openmbee.org/rdf/ontology/";
+            org.apache.jena.rdf.model.Property rdfType = model.getProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+            org.apache.jena.rdf.model.Resource collectionType = model.getResource(mmsNs + "Collection");
+            org.apache.jena.rdf.model.Property mmsId = model.getProperty(mmsNs + "id");
+            org.apache.jena.rdf.model.Property mmsEtag = model.getProperty(mmsNs + "etag");
+            org.apache.jena.rdf.model.Property mmsCollects = model.getProperty(mmsNs + "collects");
+
+            org.apache.jena.rdf.model.ResIterator iter = model.listSubjectsWithProperty(rdfType, collectionType);
+            while (iter.hasNext()) {
+                org.apache.jena.rdf.model.Resource collectionRes = iter.nextResource();
+                Collection collection = new Collection();
+
+                // Set ID from mms:id property or the URI's last path segment
+                if (collectionRes.hasProperty(mmsId)) {
+                    collection.setId(collectionRes.getProperty(mmsId).getString());
+                } else {
+                    String uri = collectionRes.getURI();
+                    if (uri != null && uri.contains("/collections/")) {
+                        collection.setId(uri.substring(uri.lastIndexOf("/") + 1));
+                    }
+                }
+
+                // Set etag
+                if (collectionRes.hasProperty(mmsEtag)) {
+                    collection.setEtag(collectionRes.getProperty(mmsEtag).getString());
+                }
+
+                // Collect all mms:collects ref IRIs
+                org.apache.jena.rdf.model.StmtIterator collectsIter = collectionRes.listProperties(mmsCollects);
+                while (collectsIter.hasNext()) {
+                    org.apache.jena.rdf.model.Statement stmt = collectsIter.nextStatement();
+                    if (stmt.getObject().isResource()) {
+                        collection.addCollectedRef(stmt.getObject().asResource().getURI());
+                    }
+                }
+
+                collection.setName(collection.getId());
+                collections.add(collection);
+            }
+
+            logger.debug("Parsed {} collections from RDF", collections.size());
+        } catch (Exception e) {
+            logger.error("Failed to parse collections from RDF: {}", e.getMessage(), e);
+        }
+        return collections;
     }
 
     /**

@@ -332,6 +332,166 @@ class FlexoMmsClientTest {
         verify(mockAuthHandler).getAuthorizationHeader();
     }
 
+    @Test
+    void testSquashSuccess() throws Exception {
+        String responseBody = "@prefix morc: <http://example.com/orgs/org1/repos/repo1/commits/abc-123> .";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(responseBody.getBytes()));
+        when(mockHttpClient.execute(any(HttpPost.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        String result = client.squash("org1", "repo1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock2");
+
+        assertEquals("abc-123", result);
+        verify(mockHttpClient).execute(any(HttpPost.class));
+    }
+
+    @Test
+    void testSquashError() throws Exception {
+        when(mockResponse.getCode()).thenReturn(400);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream("Bad squash".getBytes()));
+        when(mockHttpClient.execute(any(HttpPost.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        assertThrows(IOException.class, () -> client.squash("org1", "repo1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock1",
+            "http://example.com/orgs/org1/repos/repo1/locks/lock2"));
+    }
+
+    @Test
+    void testListCollectionsSuccess() throws Exception {
+        String turtle = "@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n"
+                + "<http://example.com/orgs/org1/collections/c1> a mms:Collection ;\n"
+                + "    mms:id \"c1\" ;\n"
+                + "    mms:collects <http://example.com/orgs/org1/repos/repo1/branches/master> .";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(turtle.getBytes()));
+        when(mockHttpClient.execute(any(HttpGet.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        List<org.openmbee.flexo.cli.model.Collection> result = client.listCollections("org1");
+
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("c1", result.get(0).getId());
+        assertTrue(result.get(0).getCollectedRefs().stream().anyMatch(r -> r.endsWith("/master")));
+    }
+
+    @Test
+    void testListCollectionsError() throws Exception {
+        when(mockResponse.getCode()).thenReturn(404);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream("Not found".getBytes()));
+        when(mockHttpClient.execute(any(HttpGet.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        assertThrows(IOException.class, () -> client.listCollections("org1"));
+    }
+
+    @Test
+    void testGetCollectionSuccess() throws Exception {
+        String turtle = "@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n"
+                + "<http://example.com/orgs/org1/collections/c1> a mms:Collection ;\n"
+                + "    mms:id \"c1\" ;\n"
+                + "    mms:etag \"etag-1\" .";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(turtle.getBytes()));
+        when(mockHttpClient.execute(any(HttpGet.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        org.openmbee.flexo.cli.model.Collection result = client.getCollection("org1", "c1");
+
+        assertNotNull(result);
+        assertEquals("c1", result.getId());
+        assertEquals("etag-1", result.getEtag());
+    }
+
+    @Test
+    void testCreateCollectionEmptyRefsThrows() throws Exception {
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        assertThrows(IOException.class,
+            () -> client.createCollection("org1", "c1", java.util.Collections.emptyList()));
+        assertThrows(IOException.class,
+            () -> client.createCollection("org1", "c1", null));
+        verify(mockHttpClient, never()).execute(any(HttpUriRequestBase.class));
+    }
+
+    @Test
+    void testQueryCollectionSuccess() throws Exception {
+        String sparqlResults = "{\"head\":{},\"results\":{\"bindings\":[]}}";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(sparqlResults.getBytes()));
+        when(mockHttpClient.execute(any(HttpPost.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        String result = client.queryCollection("org1", "c1", "SELECT * WHERE { ?s ?p ?o }");
+
+        assertNotNull(result);
+        assertTrue(result.contains("bindings"));
+        verify(mockHttpClient).execute(any(HttpPost.class));
+    }
+
+    @Test
+    void testQueryCollectionError() throws Exception {
+        when(mockResponse.getCode()).thenReturn(400);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream("Bad query".getBytes()));
+        when(mockHttpClient.execute(any(HttpPost.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        assertThrows(IOException.class,
+            () -> client.queryCollection("org1", "c1", "INVALID"));
+    }
+
+    @Test
+    void testResolveBranchIriUsesServerRootContext() throws Exception {
+        // Branch list carries the server root context (http://layer1-service),
+        // which differs from the client base URL (http://example.com).
+        String turtle = "@prefix mms: <https://mms.openmbee.org/rdf/ontology/> .\n"
+                + "<http://layer1-service/orgs/org1/repos/repo1/branches/master> a mms:Branch ;\n"
+                + "    mms:id \"master\" ;\n"
+                + "    mms:commit <http://layer1-service/orgs/org1/repos/repo1/commits/abc> .";
+
+        when(mockResponse.getCode()).thenReturn(200);
+        when(mockResponse.getEntity()).thenReturn(mockEntity);
+        when(mockEntity.getContent()).thenReturn(new ByteArrayInputStream(turtle.getBytes()));
+        when(mockHttpClient.execute(any(HttpGet.class))).thenReturn(mockResponse);
+
+        FlexoMmsClient client = createClientWithMockedHttp();
+
+        String iri = client.resolveBranchIri("org1", "repo1", "master");
+
+        assertEquals("http://layer1-service/orgs/org1/repos/repo1/branches/master", iri);
+    }
+
+    @Test
+    void testResolveBranchIriPassesThroughAbsolute() throws Exception {
+        FlexoMmsClient client = createClientWithMockedHttp();
+        String abs = "http://layer1-service/orgs/org1/repos/repo1/branches/feature";
+        assertEquals(abs, client.resolveBranchIri("org1", "repo1", abs));
+        // Absolute IRI must not trigger a branch-list lookup.
+        verify(mockHttpClient, never()).execute(any(HttpGet.class));
+    }
+
     private FlexoMmsClient createClientWithMockedHttp() throws Exception {
         FlexoMmsClient client = new FlexoMmsClient("http://example.com", null);
         injectMockHttpClient(client);
